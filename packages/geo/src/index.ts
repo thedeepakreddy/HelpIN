@@ -110,7 +110,17 @@ export function cellsForBbox(bbox: BBox, res: number, maxCells = 400): string[] 
     [w, n],
     [w, s],
   ];
-  const cells = polygonToCells(polygon, res, true);
+  // polygonToCells only returns cells whose centre is inside the box. Add the cells under the
+  // corners and the centre too, so partly visible cells count and a viewport smaller than one
+  // cell (zoomed far in) still has a cell, never an empty list.
+  const edge = [
+    [s, w],
+    [s, e],
+    [n, e],
+    [n, w],
+    [(s + n) / 2, (w + e) / 2],
+  ].map(([lat, lng]) => latLngToCell(lat!, lng!, res));
+  const cells = [...new Set([...polygonToCells(polygon, res, true), ...edge])];
   if (cells.length > maxCells) {
     throw new GeoRuleError('BBOX_TOO_LARGE', `Viewport covers ${cells.length} cells at res ${res}.`);
   }

@@ -1,3 +1,4 @@
+import { latLngToCell } from 'h3-js';
 import { describe, expect, it } from 'vitest';
 import {
   cellPolygon,
@@ -69,6 +70,12 @@ describe('map helpers', () => {
   it('caps oversized viewports', () => {
     expect(() => cellsForBbox([18.9, 47.3, 19.4, 47.7], 8, 400)).toThrow(GeoRuleError);
     expect(cellsForBbox([19.04, 47.47, 19.06, 47.48], 8).length).toBeGreaterThan(0);
+    // Zoomed far in: a viewport smaller than one cell still maps to the cell under it.
+    const tiny = cellsForBbox([19.0481, 47.4772, 19.0483, 47.4773], 8);
+    expect(tiny).toEqual([latLngToCell(47.47725, 19.0482, 8)]);
+    // Partly visible cells at the edges count too.
+    const box: [number, number, number, number] = [19.04, 47.47, 19.06, 47.48];
+    for (const [lat, lng] of [[47.47, 19.04], [47.48, 19.06]]) expect(cellsForBbox(box, 8)).toContain(latLngToCell(lat!, lng!, 8));
   });
 
   it('knows Budapest', () => {
