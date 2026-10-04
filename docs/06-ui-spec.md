@@ -151,11 +151,26 @@ flowchart TB
 | **Problem status** | **Open** · ✅ **Solved** · ↩️ **Withdrawn** · ⏳ **Expired** · 🚫 **Removed** (abandoned problems show as "Closed: no activity") |
 | **Offer status** (seen by helper) | **Offer sent** · **Accepted** · **Declined** · **You helped ✓** · **Closed** |
 
+### 4.1b Visual language: "Tram & Danube"
+
+The look is inspired by Budapest itself: the yellow trams and the green Danube banks. It's built to
+feel crafted and specific to HelpIn, not like a generic template.
+
+| Element | Rule |
+|---|---|
+| **Core colours** | Emerald `#0A7A56` (primary; lip `#065A3F`) · Tram yellow `#FFC531` (highlight; lip `#D99B00`) · Sapphire `#2352E0` (info / language / Basic) · Amber `#F28C00` (Medium) · Coral `#E8452C` (Serious) · Ink `#0E1A14` · Paper `#F3F4EE` |
+| **Colour blocking** | Key moments use solid colour fields, not pale tints: emerald hero on Welcome and Login, emerald profile header, solid yellow karma tile, yellow pinned update |
+| **3D tactile buttons** | Every primary button sits on a darker 4–5 px "lip" (`box-shadow: 0 4px 0 <lip>`) with a soft drop shadow and a 1 px inner highlight. Pressing moves it down 3 px and the lip collapses, so it feels physical. Secondary buttons are white with a grey lip. Disabled buttons are flat. |
+| **Hexagon signature** | The hexagon (the app's "area" shape) is the brand shape: avatars, icon tiles, map areas, legend dots, and the 3D Create button are hexagons. Generic rounded squares are avoided. |
+| **Mascots ("Hexies")** | Yellow lead with a sprout, sapphire, and mint. They appear on Welcome and Login, and later in empty states and celebrations (§6.2b). |
+| **Type** | Bricolage Grotesque 800 for display (tight tracking, big contrast between sizes) · Figtree for UI text |
+| **Restraint** | No gradients, no emoji as icons, no glassmorphism. Line icons only. One primary action per screen. |
+
 ### 4.2 Foundations
 
 | Token group | Plan |
 |---|---|
-| Colour | Neutral base + brand accent (to be designed); semantic tokens `--urgency-basic/medium/serious`, `--success`, `--warning`, `--danger`, `--info`; all pairs meet WCAG AA contrast; **dark mode** from day one |
+| Colour | See §4.1b; semantic tokens `--urgency-basic/medium/serious`, `--success`, `--warning`, `--danger`, `--info`; all pairs meet WCAG AA contrast; **dark mode** from day one |
 | Type | System font stack (fast, no download); sizes 12 / 14 / 16 (body) / 20 / 24 / 32 |
 | Spacing | 4-px grid (4, 8, 12, 16, 24, 32) |
 | Radius | 8 px (inputs, chips), 12 px (cards), 20 px (sheets) |
