@@ -15,7 +15,10 @@ Use these words in code, UI copy, and conversation. One word per concept.
 | **Problem** | One user's report of something that needs solving. Owned by its **asker**. | A feed *post* |
 | **Incident** | The real-world thing a problem is about. One or more problems + "same here" users. **The map shows incidents.** | A problem (1 incident : N problems) |
 | **Kind** | `request` (personal, a neighbour can solve) or `issue` (shared/civic). See Theory §5. | Category |
-| **Category** | What it's about (Lost & found, Water, …). Sets the default kind and default urgency. | Kind |
+| **Category** | What it's about: people, environment, roads, utilities, safety, or anything else (catalogue in §11). Sets the default kind and default urgency. | Kind |
+| **Progress update** | A public post on a problem's tab saying what has changed and what is still needed ("Got the tools, still need one more person"). Posted mainly by the asker. | A chat message (private) |
+| **Check-in** | Any asker action that proves the problem is still live: a progress update (including one-tap "Still need help"), accepting an offer, or confirming solved. Must happen before the **check-in deadline**. | — |
+| **Abandoned** | Terminal status for a problem whose asker missed the check-in deadline and its grace period. It's removed from the map and the asker gets a karma penalty. | Withdrawn (honest, no penalty) |
 | **Urgency** | `basic` · `medium` · `serious`. Always shown as a **label + icon + colour**, never colour alone. | Priority/ranking |
 | **Area** | The public, approximate location of a problem: an H3 hexagon cell. | Exact location |
 | **Help offer** | A helper saying "I can help" on a problem, optionally with a message. | A chat message |
@@ -64,7 +67,7 @@ flowchart LR
 |---|---|---|
 | Identity & Profiles | users, profiles, devices, blocks, notification prefs | signUp, updateProfile, setHomeArea, block |
 | Geo | H3 snapping, locality names, launch areas | snapToArea, localityFor, isInLaunchArea |
-| Problems & Incidents | incidents, problems, problem_photos, incident_affected, incident_updates, private locations | createProblem, markSameHere, withdraw, extend, postUpdate |
+| Problems & Incidents | incidents, problems, problem_updates, problem_photos, incident_affected, private locations | createProblem, markSameHere, withdraw, postUpdate, checkInSweep (system) |
 | Help & Resolution | help_offers, resolution logic | offerHelp, acceptOffer, declineOffer, withdrawOffer, claimSolved, confirmSolved, confirmFixed (issues) |
 | Karma | karma_entries, cached balances | awardForSolve, reverseEntry |
 | Chat | conversations, participants, messages | openForOffer, sendMessage, shareExactLocation |
@@ -84,9 +87,10 @@ erDiagram
   USER ||--o{ PROBLEM : asks
   INCIDENT ||--|{ PROBLEM : groups
   INCIDENT ||--o{ INCIDENT_AFFECTED : "same here"
-  INCIDENT ||--o{ INCIDENT_UPDATE : "status updates"
+  PROBLEM ||--o{ PROBLEM_UPDATE : "progress updates"
   PROBLEM ||--o| PROBLEM_PRIVATE_LOCATION : "exact point (private)"
   PROBLEM ||--o{ PROBLEM_PHOTO : documents
+  PROBLEM_UPDATE ||--o{ PROBLEM_PHOTO : "may include"
   PROBLEM ||--o{ HELP_OFFER : receives
   USER ||--o{ HELP_OFFER : makes
   HELP_OFFER ||--o| CONVERSATION : "opens on accept"
@@ -117,9 +121,10 @@ Notes on what changed from the original entity list, and why:
 - **`media` added.** A single upload pipeline (EXIF stripping, resizing, moderation) serves problem
   photos, post photos, avatars and chat images. Usage is recorded in `problem_photos` and
   `post_media`, which keeps the two photo worlds separate.
+- **`problem_updates` added.** A public progress timeline on each problem (§4.6). Update photos
+  are problem photos, so they appear in the asker's *Problem photos* profile tab, never the feed.
 - **`karma_transactions` → `karma_entries` (append-only ledger).**
-- **`blocks`, `incident_affected`, `incident_updates`, `devices`, `moderation_actions`,
-  `outbox_events` added.**
+- **`blocks`, `incident_affected`, `devices`, `moderation_actions`, `outbox_events` added.**
 
 ---
 
@@ -130,11 +135,14 @@ Notes on what changed from the original entity list, and why:
 ```mermaid
 stateDiagram-v2
   [*] --> open : createProblem
+  open --> open : check-in (update / accept / …)\nresets check_in_due_at
   open --> solved : confirmSolved (asker)\nor fixed-quorum (issue)
-  open --> expired : expires_at reached (system)
-  open --> withdrawn : withdraw (asker)
+  open --> abandoned : check-in deadline + grace missed (system)\nasker penalised
+  open --> expired : max lifetime reached (system)\nno penalty
+  open --> withdrawn : withdraw (asker)\nno penalty
   open --> removed : moderator
   solved --> removed : moderator
+  abandoned --> [*]
   expired --> [*]
   withdrawn --> [*]
   solved --> [*]
@@ -147,14 +155,14 @@ and go.
 
 | Rule | |
 |---|---|
-| **R-01** | A problem is created `open` with `expires_at = now + TTL(urgency)`: serious 24 h, medium 3 d, basic 7 d (config). |
-| **R-02** | Only the asker can `withdraw`, `extend`, or `confirmSolved`. |
-| **R-03** | `extend` is allowed once, only while `open`, and adds one TTL. |
-| **R-04** | `solved`, `expired`, `withdrawn`, `removed` are terminal. There's no reopen, so the user posts a new problem. This keeps karma consistent. |
+| **R-01** | A problem is created `open` with `check_in_due_at = now + interval(kind, urgency)` and `max_life_at = now + max_lifetime(kind, urgency)` (§4.7, config). |
+| **R-02** | Only the asker can `withdraw`, post asker progress updates, or `confirmSolved`. |
+| **R-03** | An open problem stays open as long as the asker keeps checking in, up to its max lifetime (§4.7). There's no manual "extend". Staying active is how a problem stays alive. |
+| **R-04** | `solved`, `abandoned`, `expired`, `withdrawn`, `removed` are terminal. There's no reopen, so the user posts a new problem. This keeps karma consistent. |
 | **R-05** | Terminal problems leave the active map immediately. They remain visible on the owner's profile and in solver history (except `removed`). |
 | **R-06** | Every transition is written with an optimistic-concurrency check (`WHERE status = 'open'`). Double-taps and races can't double-solve or double-award. |
 | **R-07** | Every command accepts an idempotency key. Replaying the same key returns the original result. |
-| **R-08** | Before expiry: a push reminder at 24 h before `expires_at` (basic/medium), offering one-tap extend. |
+| **R-08** | Check-in reminders and the abandonment process are defined in §4.7 (R-50…R-58). Reaching `max_life_at` sends a "Your problem has closed. Post again if you still need help" notice. |
 
 ### 4.2 Help offer
 
@@ -209,7 +217,7 @@ Zero credits is valid ("I solved it myself" / "it resolved on its own").
 | **R-20** | The reporter (asker) can `confirmSolved` exactly as in §4.3. |
 | **R-21** | Users with an `incident_affected` row may tap **"Fixed now"**. When **3** distinct affected users (config) have confirmed within 48 h, the problem is `solved` with **no credits** by the system. |
 | **R-22** | After a fixed-quorum solve, the reporter has **72 h** to credit helpers (`creditAfterSolve`). The same karma rules apply. |
-| **R-23** | Affected users, the reporter, and helpers with an offer may post short public **updates** ("Complaint filed, ref #123", "Water back on Block C"). Updates are text-only and rate-limited. |
+| **R-23** | For issues, affected users and helpers with an offer may also post public progress updates ("Complaint filed, ref #123", "Water back on Block C"). See R-42. |
 
 ### 4.5 Incident
 
@@ -220,6 +228,70 @@ Zero credits is valid ("I solved it myself" / "it resolved on its own").
 | **R-32** | Incident display fields (`affected_count`, `max_urgency`, `status`) are recomputed whenever a member problem or affected row changes. An incident is `open` while any member problem is open. |
 | **R-33** | Map card prominence = f(affected_count, urgency). Implemented client-side from those two fields. |
 | **R-34** (later) | Incident merge: re-point problems to the surviving incident, union affected users, write `incident_merges` (for audit/undo). No other table changes. |
+
+### 4.6 Progress updates (the problem tab's timeline)
+
+Helpers can only help well if they know the *current* state of a problem. A problem posted
+yesterday may already be half solved, or the need may have changed. So every problem tab has a
+public **progress timeline**, with the latest update pinned at the top.
+
+```
+┌ Need help moving a sofa to 3rd floor ─────────────── 🟡 Medium ┐
+│ 📌 Latest · 2 h ago · 🟠 Partly solved                          │
+│    "Got one person already. Need ONE more, after 6 pm."         │
+│ ── Timeline ──                                                  │
+│ 2 h ago  🟠 Partly solved  "Got one person already…"            │
+│ 1 d ago  🔵 Still need help (one-tap)                           │
+│ 1 d ago  ⚪ Posted                                               │
+│ [ I can help ]                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+| Rule | |
+|---|---|
+| **R-40** | The asker can post a progress update on their open problem. An update has a **progress status**, optional text (≤ 500 chars) and up to 3 photos. Statuses: 🔵 *Still need help* · 🟢 *Making progress* · 🟠 *Partly solved* · 🟣 *Need has changed*. A *note* update (status unchanged) is also allowed. |
+| **R-41** | The latest asker update is **pinned** at the top of the problem tab and summarised on the map card ("Updated 2 h ago · Partly solved"). The full timeline is visible to everyone who can see the problem. |
+| **R-42** | For `kind = issue`, affected users and helpers with an offer may also post updates, labelled by role ("Affected neighbour", "Helper"). Only the asker's updates count as check-ins (R-51). |
+| **R-43** | Every asker update notifies helpers with an active offer (and, for issues, affected users). Notifications are batched at most once per 30 min per problem. |
+| **R-44** | Update photos go through the media pipeline (EXIF stripped, L-08), belong to the problem, and appear in the asker's **Problem photos** profile tab. They never appear in the feed (F-03). |
+| **R-45** | Updates are reportable (S-04). Rate limit: 10 updates per problem per day per author. |
+| **R-46** | *Need has changed* requires text explaining the new need, so helpers aren't misled by the original description. The title and description stay as originally posted, and the timeline tells the story. |
+
+### 4.7 Asker activity rule (check-ins & abandonment)
+
+**Principle: an open problem must be live.** A stale problem (already solved, no longer needed,
+or forgotten) wastes helpers' time and teaches them that the map can't be trusted. So the asker
+must keep it updated, or it's removed and they lose karma. **Honesty is never penalised, only
+silence is.** Withdrawing ("no longer needed", "solved elsewhere") is always free.
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> Live : posted / check-in
+  Live --> Reminded : 75% of interval elapsed\n(push: "Still need help?")
+  Reminded --> Live : check-in
+  Reminded --> Overdue : check_in_due_at reached\n(push: "Update now")
+  Overdue --> Live : check-in
+  Overdue --> Abandoned : grace period over\n(final warning sent earlier)
+  Abandoned --> [*] : removed from map\n−5 karma to asker
+```
+
+| Rule | |
+|---|---|
+| **R-50** | Each open problem has `check_in_due_at`. Missing it plus the grace period makes the problem `abandoned`. |
+| **R-51** | **Check-ins** (each resets `check_in_due_at = now + interval`): an asker progress update (including the one-tap **"Still need help"** button on the reminder notification), accepting an offer, or confirming solved. Withdrawing ends the problem without penalty. **Chat messages don't count**, because they're private and helpers browsing the map can't see them. |
+| **R-52** | Check-in intervals and max lifetimes (config):<br>• request: basic every **72 h** (max 30 d) · medium every **24 h** (max 14 d) · serious every **6 h** (max 72 h)<br>• issue: basic every **7 d** (max 90 d) · medium every **3 d** (max 60 d) · serious every **12 h** (max 7 d)<br>Issues get longer intervals because civic and environmental fixes (a polluted pond, a broken road) take weeks. |
+| **R-53** | **Reminders** (push + in-app, each with one-tap "Still need help" / "It's solved" / "Withdraw"): at 75% of the interval, and at the deadline. |
+| **R-54** | **Grace period** after the deadline = 25% of the interval (min 1 h, max 24 h). A final warning goes out at the start of grace: "This problem will be removed in 6 h and you'll lose 5 karma." |
+| **R-55** | When grace ends without a check-in, the problem becomes `abandoned` in one transaction: removed from the map, open offers → `closed`, helpers notified ("The asker stopped updating this problem"), penalty applied (K-12), exact location purge scheduled (L-07). |
+| **R-56** | **Issue steward handover:** for `kind = issue`, if any affected user has been active (Same here, update, or Fixed-now vote) within the last interval, the *incident* isn't removed. The asker's problem still becomes `abandoned` (penalty applies), and the most recently active affected user is invited to become **steward**. Accepting promotes their "Same here" into a problem they own, with a fresh check-in schedule. If nobody accepts within the grace period, the incident closes. |
+| **R-57** | **No penalty** when: the problem reaches `max_life_at` (→ `expired`); the asker withdraws; the problem was hidden by moderation during the window; or a moderator voids it because of a system fault such as failed notifications (reversal entry, K-08). |
+| **R-58** | Askers see their check-in deadline on their own problem ("Update within 18 h to keep this live"). Helpers see freshness ("Updated 2 h ago"), not the deadline. |
+
+*Why this also fixes the confirmation problem:* the biggest risk in the core loop is askers who
+get helped and then never tap "Confirm solved" (Theory §11). Under this rule a forgotten problem
+costs the asker karma, and the reminder that saves it offers **"It's solved"** as the one-tap
+answer.
 
 ---
 
@@ -291,7 +363,11 @@ ledger at any time.
 | **K-08** | Entries are never updated or deleted. A moderator reversal appends an entry with `amount = −original` and `reverses_entry_id`. An entry can be reversed at most once. |
 | **K-09** | `neighbours_helped` = number of **distinct askers** who credited this helper (non-reversed entries, including zero-amount ones). |
 | **K-10** | **Velocity flags** (no automatic penalty, these create a moderation item): > 5 credits between the same pair in 30 days; > 15 credits to one helper in 24 h; > 5 solved problems in 24 h by one asker crediting the same helper. |
-| **K-11** | Askers earn no karma in MVP (anti-farming). Revisit if the confirmation rate is low. |
+| **K-11** | Askers earn no karma in MVP (anti-farming). Their incentive to close the loop is avoiding the abandonment penalty (K-12). |
+| **K-12** | **Abandonment penalty:** when a problem becomes `abandoned` (R-55), the asker gets **−5 karma** (`reason = 'abandonment_penalty'`). This is the **only** way karma decreases apart from moderator reversals. Users can never take karma from each other, so there's no retaliation loop. |
+| **K-13** | **Escalation:** 2nd abandonment within 30 days = **−10**. 3rd within 30 days = **−10** and the asker is put **on notice**: max 1 new problem per day for 14 days. |
+| **K-14** | Karma **can go negative**, so the penalty means something even for new users. A new user starts at 0 and abandoning their first problem gives −5. |
+| **K-15** | **Reliability** (shown on the profile next to karma): % of the user's problems in the last 90 days that ended `solved`, `withdrawn` or `expired`, as opposed to `abandoned`. "Closes the loop: 92%". Helpers can use it to judge whether an asker is worth their time. Shown once the user has ≥ 3 finished problems. |
 
 Later (not MVP): weighting by urgency/impact, badges ("First Help", "10 Neighbours", "Water
 Warrior"), solver levels, streaks, and decay of inactive reputation.
@@ -332,6 +408,7 @@ Warrior"), solver levels, streaks, and decay of inactive reputation.
 | `new` | Account < 7 days **or** never credited | Lower rate limits; can't post `serious` urgency without phone verification |
 | `member` | ≥ 7 days and phone-verified | Normal limits |
 | `trusted` | `neighbours_helped ≥ 5` and no upheld reports in 90 d | Higher limits; "Trusted neighbour" badge (later) |
+| `on_notice` | 3 abandonments within 30 d (K-13) | Max 1 new problem per day for 14 days; can still help others |
 | `restricted` | Set by moderator | Read-only; can't post, offer, or message |
 
 ### Default rate limits (config)
@@ -373,7 +450,38 @@ Written in the same transaction as the state change, then consumed asynchronousl
 | `SolveClaimed` | Notifications (to asker, + reminder schedule) |
 | `ProblemSolved` | Notifications (helpers + affected), Map cache, Location purge scheduler, Analytics |
 | `HelperCredited` | Notifications ("You earned 10 karma"), Profile cache |
+| `ProblemUpdated` | Notifications (helpers with offers, affected users; batched R-43), map card freshness |
+| `CheckInDue` (reminder / overdue / final warning) | Notifications (asker, with one-tap actions) |
+| `ProblemAbandoned` | Karma (penalty K-12/K-13), Notifications (asker + helpers), steward handover (R-56), Location purge scheduler |
+| `StewardInvited` / `StewardAccepted` | Notifications, Problems (promote "Same here" to a problem) |
 | `ProblemExpired` / `ProblemWithdrawn` | Notifications (helpers with offers), Location purge scheduler |
 | `MessageSent` | Notifications (if recipient not active in that chat) |
 | `ContentReported` | Moderation queue, auto-hide check (S-05) |
 | `MediaUploaded` | Media pipeline (strip, resize, scan) |
+
+---
+
+## 11. Category catalogue: any problem can be posted
+
+People can post **any** local problem: human, environmental, roads, utilities, safety, or
+anything else. Categories are grouped so the create screen stays simple: pick a group, then a
+category. Each category sets a default kind and urgency, and the user can change both.
+
+| Group | Categories | Default kind | Examples |
+|---|---|---|---|
+| 🙋 **People** | Need a hand · Lost & found · Borrow / lend · Elderly & neighbour support · Pets & animals · Vehicle help · Advice & recommendations | request | Moving a sofa, lost keys, need a ladder, check on an elderly neighbour, stray dog injured, car won't start |
+| 🌳 **Environment** | Garbage & dirty areas · Rivers, lakes & ponds · Parks & green spaces · Trees & plants · Air, smoke & noise · Water wastage | issue | Garbage dumped on an empty plot, polluted pond, broken park benches, fallen tree, burning waste, leaking pipe |
+| 🛣️ **Roads & public spaces** | Roads & potholes · Streetlights · Drainage & sewage · Footpaths & public spaces · Traffic & parking | issue | Pothole, dark street, overflowing drain, blocked footpath |
+| 💧 **Utilities** | Water supply · Power cuts · Gas · Internet / phone network | issue | No water since morning, area power cut |
+| 🛡️ **Safety** | Safety concern (non-emergency) · Personal support | request | Unsafe dark lane, suspicious activity, someone needs support |
+| ➕ **Other** | Anything else | user chooses | Anything that doesn't fit above |
+
+Rules:
+
+| Rule | |
+|---|---|
+| **CAT-01** | The catalogue is config (served by `/meta/config`), so categories can be added without an app release. |
+| **CAT-02** | **Community tasks:** environment issues are often things neighbours *can* fix together (a park or pond clean-up drive). Helpers can offer ("I'll join the clean-up on Sunday"), and the reporter credits them on solve, exactly like a request. |
+| **CAT-03** | **Personal support** shows helpline numbers ⚑ and a reminder not to share private details publicly. HelpIN connects neighbours; it doesn't replace professional, medical or emergency help. |
+| **CAT-04** | **Not allowed in any category** (community guidelines): anything illegal, selling or advertising, political campaigning, accusations naming a private person, medical diagnosis requests. These are reportable and removed by moderation. |
+| **CAT-05** | Every "Same here" and every category correction a user makes is kept as labelled data for future AI category suggestion and duplicate detection. |

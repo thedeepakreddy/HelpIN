@@ -34,6 +34,7 @@ HelpIN is a **status system**. Every problem has:
 | Closure | Lost in scroll | Owner confirms; pin disappears |
 | Credit | "Thanks 🙏" | Karma + solver history, permanently attributed |
 | Duplicates | 15 messages about the same outage | 1 incident with "15 affected" |
+| Freshness | Old messages look as current as new ones | The asker must keep the problem updated; stale problems disappear |
 | Reach | Only members of that group | Everyone nearby, including people not in the group |
 
 **Closure is the product.** The map and the karma exist to make closure visible.
@@ -132,7 +133,7 @@ This becomes a first-class field: **`kind = request | issue`**.
 
 | | **Request** | **Issue** |
 |---|---|---|
-| Default categories | Lost & found, Need a hand, Borrow/lend, Vehicle help, Pets | Water/power, Roads & lights, Drainage/garbage, Safety concern |
+| Default categories | People: need a hand, lost & found, borrow/lend, elderly support, pets, vehicle help | Environment (garbage, rivers/lakes/ponds, parks, trees, pollution), roads & public spaces, utilities |
 | Value to users | Someone actually solves it | Aggregation ("23 affected"), status updates, collective pressure |
 | Who confirms solved | The asker | The original reporter, **or** ≥ 3 affected users confirming "fixed", **or** auto-expire |
 | Karma | Helpers credited by the asker | Helpers who contributed (e.g. filed the complaint, posted the fix ETA), credited by the reporter. MVP: same flat amount. |
@@ -140,6 +141,40 @@ This becomes a first-class field: **`kind = request | issue`**.
 
 The category sets the default `kind`, and the user can override it. Both kinds share one state
 machine (see Domain Model §4), so this costs very little to build but avoids a redesign later.
+
+**Any problem can be posted:** human problems, environmental problems (dirty areas, local rivers,
+ponds, lakes, parks), road problems, utilities, safety, or anything else. The full catalogue is in
+Domain Model §11. Environmental problems are often **community tasks**: a pond can't be cleaned
+by one person, but ten neighbours on a Sunday can. HelpIN should make organising that as easy as
+asking for a ladder.
+
+---
+
+## 5b. Live problems: progress updates and asker accountability
+
+A map of problems is only useful if the problems on it are **real and current**. Two things make
+that true:
+
+1. **Progress updates.** The asker posts updates on the problem's tab ("Got one person, need one
+   more after 6 pm"; "Need has changed: now need a plumber, not tools"). Helpers can see exactly
+   what is still needed before they offer, so less help is wasted and more problems get solved.
+2. **Accountability.** The asker must check in regularly (post an update, or tap "Still need
+   help"). If they go silent past the deadline and a grace period, the problem is removed and
+   **they lose karma**. Without this, the map fills with ghosts: problems already solved, or no
+   longer needed, that helpers waste time on until they stop trusting the app.
+
+The rule is designed to be **fair**:
+- **Silence is penalised, honesty never is.** Withdrawing ("no longer needed") is always free.
+- Reminders come before any penalty, and each has one-tap answers: *Still need help* ·
+  *It's solved* · *Withdraw*.
+- Intervals match the problem: a serious request needs a check-in every 6 h, a slow civic issue
+  every 7 days.
+- For shared issues, if the reporter disappears but neighbours are still affected, one of them can
+  take over as **steward** instead of the issue vanishing.
+
+This also fixes the biggest weakness of the core loop. Askers who got help but never tap
+"Confirm solved" now have a reason to: the reminder offers *It's solved* as the easiest answer.
+Exact rules: Domain Model §4.6–4.7.
 
 ---
 
@@ -160,13 +195,16 @@ Once karma is a target, people optimise for karma instead of help:
 |---|---|---|
 | **Collusion farming** | Two friends post fake problems and confirm each other | Pair cap: the same asker→helper pair earns karma at most once per 7 days, and lifetime karma from one asker is capped. Velocity flags go to moderation. |
 | **Sockpuppets** | One person with 5 accounts | Phone verification required to earn karma; new accounts (< 24 h) can't earn; one account per phone number |
-| **Confirmation pressure** | "Confirm or I won't help next time" | Askers can report a helper; confirmation is private until done; no negative karma (so no retaliation loop) |
+| **Confirmation pressure** | "Confirm or I won't help next time" | Askers can report a helper; confirmation is private until done; users can never give each other negative karma (so no retaliation loop) |
+| **Ghost problems** | Asker gets help, then disappears without confirming | Check-in rule: silence → problem removed + system karma penalty (−5, escalating). This is the only karma loss besides moderator reversals. |
 | **Credit grabbing** | Helper claims solved when they didn't help | Only the asker chooses who to credit; helpers can only *suggest* |
 | **Low-effort spam** | Offering help on everything | Offering earns nothing; only confirmed outcomes do |
 
 ### What to display publicly
 
-- **Karma points**: the headline number.
+- **Karma points**: the headline number. It can go negative through abandonment penalties.
+- **Reliability**: "Closes the loop: 92%", the share of their own problems the user closed
+  properly. It's the asker-side trust signal.
 - **"Neighbours helped"**: the count of *unique* people helped. It's much harder to farm than raw
   karma and is the more honest trust signal.
 - **Solver history**: the list of solved problems (category, area, date), not the private details.
@@ -241,6 +279,8 @@ When in doubt, apply these in order:
 7. **Model for clustering on day one, automate it later.** Every problem belongs to an incident
    from the start, so AI grouping later is a background job, not a migration.
 8. **Problems first, feed second.**
+9. **Live or gone.** Every open problem on the map is current. Askers keep it updated or it
+   disappears.
 
 ---
 
@@ -269,7 +309,9 @@ These are hypotheses for a first launch area. Recalibrate after 4 weeks of real 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Not enough helpers nearby (cold start) | High | Fatal | Atomic launch area, founding helpers, push engine, single-player value for issues |
-| Askers don't confirm, so the loop never closes | High | High | Helper "I think it's solved" nudge, reminder pushes at 24 h / 72 h, one-tap confirm from the notification |
+| Askers don't confirm, so the loop never closes | High | High | Check-in rule with abandonment penalty; reminders offer one-tap "It's solved"; helper "I think it's solved" nudge |
+| Map fills with stale problems | High | High | Check-in rule (live or gone); "Updated 2 h ago" freshness on every card |
+| Penalty feels unfair, so askers stop posting | Medium | Medium | Withdraw is always free; reminders + grace before any penalty; small first penalty; moderator can void; tune intervals from data |
 | Feed eats the product | Medium | High | §8 guardrails, ship feed later |
 | Safety incident (stalking/harassment) | Low–Medium | Fatal for trust | Area-only location, no cold DMs, EXIF stripping, block/report from day one, 18+ only |
 | Karma farming | Medium | Medium | §6 mitigations, ledger reversibility |

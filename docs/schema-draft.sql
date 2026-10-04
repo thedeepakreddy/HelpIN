@@ -29,6 +29,7 @@ CREATE TABLE app.users (
                        CHECK (status IN ('active', 'restricted', 'deleted')),
   phone_verified_at  timestamptz,
   adult_confirmed_at timestamptz,                      -- S-01
+  on_notice_until    timestamptz,                      -- K-13: 1 problem/day while set
   created_at         timestamptz NOT NULL DEFAULT now(),
   deleted_at         timestamptz                       -- S-07: row kept, PII scrubbed
 );
@@ -133,7 +134,8 @@ CREATE TABLE app.incidents (
   category       text NOT NULL,
   kind           text NOT NULL CHECK (kind IN ('request', 'issue')),
   status         text NOT NULL DEFAULT 'open'
-                   CHECK (status IN ('open', 'solved', 'expired', 'withdrawn', 'removed', 'merged')),
+                   CHECK (status IN ('open', 'solved', 'abandoned', 'expired', 'withdrawn',
+                                     'removed', 'merged')),
   area_cell      app.h3_cell NOT NULL,
   area_res       smallint NOT NULL CHECK (area_res IN (7, 8, 9)),
   cell_r8        app.h3_cell,                           -- null when area_res = 7
@@ -164,7 +166,8 @@ CREATE TABLE app.problems (
   description     text NOT NULL DEFAULT '' CHECK (char_length(description) <= 1000),
   urgency         text NOT NULL CHECK (urgency IN ('basic', 'medium', 'serious')),
   status          text NOT NULL DEFAULT 'open'
-                    CHECK (status IN ('open', 'solved', 'expired', 'withdrawn', 'removed')),
+                    CHECK (status IN ('open', 'solved', 'abandoned', 'expired', 'withdrawn',
+                                      'removed')),
   area_cell       app.h3_cell NOT NULL,
   area_res        smallint NOT NULL CHECK (area_res IN (7, 8, 9)),
   cell_r8         app.h3_cell,
@@ -173,8 +176,12 @@ CREATE TABLE app.problems (
   center_lat      double precision NOT NULL,
   center_lng      double precision NOT NULL,
   launch_area_id  text NOT NULL REFERENCES app.launch_areas(id),
-  expires_at      timestamptz NOT NULL,                  -- R-01
-  extended_at     timestamptz,                           -- R-03: at most once
+  check_in_due_at  timestamptz NOT NULL,                 -- R-50: reset by every check-in (R-51)
+  check_in_stage   smallint NOT NULL DEFAULT 0            -- R-53/R-54: 0 live, 1 reminded,
+                     CHECK (check_in_stage BETWEEN 0 AND 2), --   2 overdue (in grace)
+  last_check_in_at timestamptz NOT NULL DEFAULT now(),
+  max_life_at      timestamptz NOT NULL,                  -- R-52: expiry without penalty
+  promoted_from_user_id uuid REFERENCES app.users(id),   -- R-56: steward's promoted "same here"
   solved_at       timestamptz,
   solved_via      text CHECK (solved_via IN ('asker', 'fixed_quorum')),   -- R-20/R-21
   credit_deadline timestamptz,                           -- R-22
@@ -188,7 +195,8 @@ CREATE TABLE app.problems (
 );
 CREATE INDEX problems_incident_idx ON app.problems (incident_id);
 CREATE INDEX problems_owner_idx ON app.problems (owner_id, created_at DESC);
-CREATE INDEX problems_expiry_idx ON app.problems (expires_at) WHERE status = 'open';
+CREATE INDEX problems_check_in_idx ON app.problems (check_in_due_at) WHERE status = 'open';
+CREATE INDEX problems_max_life_idx ON app.problems (max_life_at) WHERE status = 'open';
 
 CREATE TABLE app.problem_private_locations (            -- L-03: never joined by public reads
   problem_id  uuid PRIMARY KEY REFERENCES app.problems(id) ON DELETE CASCADE,
@@ -200,12 +208,29 @@ CREATE TABLE app.problem_private_locations (            -- L-03: never joined by
 CREATE INDEX problem_private_locations_purge_idx
   ON app.problem_private_locations (purge_after) WHERE purge_after IS NOT NULL;
 
-CREATE TABLE app.problem_photos (
-  problem_id uuid NOT NULL REFERENCES app.problems(id),
-  media_id   uuid NOT NULL UNIQUE REFERENCES app.media(id),  -- a media item is used once (F-03)
-  position   smallint NOT NULL CHECK (position BETWEEN 0 AND 5),
-  PRIMARY KEY (problem_id, position)
+CREATE TABLE app.problem_updates (                      -- R-40..R-46: progress timeline
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  problem_id      uuid NOT NULL REFERENCES app.problems(id),
+  author_id       uuid NOT NULL REFERENCES app.users(id),
+  author_role     text NOT NULL CHECK (author_role IN ('asker', 'affected', 'helper')), -- R-42
+  progress_status text NOT NULL CHECK (progress_status IN (
+                    'still_need_help', 'making_progress', 'partly_solved', 'need_changed', 'note')),
+  body            text CHECK (char_length(body) <= 500),
+  status          text NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'hidden', 'removed')),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  CHECK (progress_status <> 'need_changed' OR coalesce(char_length(body), 0) > 0), -- R-46
+  CHECK (progress_status <> 'note' OR coalesce(char_length(body), 0) > 0)
 );
+CREATE INDEX problem_updates_problem_idx ON app.problem_updates (problem_id, created_at DESC);
+
+CREATE TABLE app.problem_photos (                       -- photos on the report and its updates
+  media_id   uuid PRIMARY KEY REFERENCES app.media(id), -- a media item is used once (F-03)
+  problem_id uuid NOT NULL REFERENCES app.problems(id),
+  update_id  uuid REFERENCES app.problem_updates(id),   -- null = attached to the original report
+  position   smallint NOT NULL CHECK (position BETWEEN 0 AND 5),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX problem_photos_problem_idx ON app.problem_photos (problem_id, update_id, position);
 
 CREATE TABLE app.incident_affected (                    -- "Same here" (R-30, R-31)
   incident_id        uuid NOT NULL REFERENCES app.incidents(id),
@@ -216,15 +241,17 @@ CREATE TABLE app.incident_affected (                    -- "Same here" (R-30, R-
 );
 CREATE INDEX incident_affected_user_idx ON app.incident_affected (user_id);
 
-CREATE TABLE app.incident_updates (                     -- R-23
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_id uuid NOT NULL REFERENCES app.incidents(id),
-  author_id   uuid NOT NULL REFERENCES app.users(id),
-  body        text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 280),
-  status      text NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'hidden', 'removed')),
-  created_at  timestamptz NOT NULL DEFAULT now()
+CREATE TABLE app.steward_invites (                      -- R-56: issue steward handover
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  incident_id      uuid NOT NULL REFERENCES app.incidents(id),
+  from_problem_id  uuid NOT NULL REFERENCES app.problems(id),   -- the abandoned problem
+  invitee_id       uuid NOT NULL REFERENCES app.users(id),
+  status           text NOT NULL DEFAULT 'pending'
+                     CHECK (status IN ('pending', 'accepted', 'declined', 'lapsed')),
+  expires_at       timestamptz NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX incident_updates_incident_idx ON app.incident_updates (incident_id, created_at);
+CREATE UNIQUE INDEX steward_one_pending_idx ON app.steward_invites (incident_id) WHERE status = 'pending';
 
 CREATE TABLE app.incident_merges (                      -- R-34 (later): audit / undo
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -271,6 +298,7 @@ CREATE TABLE app.karma_entries (
                       'pair_cooldown',       -- K-05 (amount 0)
                       'pair_cap',            -- K-06 (amount 0)
                       'ineligible_account',  -- K-07 (amount 0)
+                      'abandonment_penalty', -- K-12/K-13 (amount < 0, system-issued)
                       'reversal'             -- K-08
                     )),
   problem_id        uuid REFERENCES app.problems(id),
@@ -280,8 +308,13 @@ CREATE TABLE app.karma_entries (
 
   CHECK (source_user_id IS NULL OR source_user_id <> user_id),       -- K-04
   CHECK ((reason = 'reversal') = (reverses_entry_id IS NOT NULL)),
-  CHECK (reason NOT IN ('pair_cooldown', 'pair_cap', 'ineligible_account') OR amount = 0)
+  CHECK (reason NOT IN ('pair_cooldown', 'pair_cap', 'ineligible_account') OR amount = 0),
+  CHECK (reason <> 'abandonment_penalty'
+         OR (amount < 0 AND source_user_id IS NULL AND problem_id IS NOT NULL)),
+  CHECK (reason <> 'solve_award' OR amount > 0)
 );
+CREATE UNIQUE INDEX karma_one_penalty_per_problem_idx
+  ON app.karma_entries (problem_id) WHERE reason = 'abandonment_penalty';
 CREATE UNIQUE INDEX karma_one_award_per_offer_idx
   ON app.karma_entries (help_offer_id) WHERE reason <> 'reversal';   -- no double award (R-06)
 CREATE INDEX karma_user_idx ON app.karma_entries (user_id, created_at DESC);
@@ -377,7 +410,7 @@ CREATE TABLE app.reports (                                 -- S-04
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   reporter_id uuid NOT NULL REFERENCES app.users(id),
   target_type text NOT NULL CHECK (target_type IN (
-                'problem', 'incident_update', 'help_offer', 'message',
+                'problem', 'problem_update', 'help_offer', 'message',
                 'post', 'comment', 'user')),
   target_id   text NOT NULL,
   reason      text NOT NULL CHECK (reason IN (
@@ -541,6 +574,9 @@ SELECT
   count(*) FILTER (WHERE status <> 'open')                 AS closed,
   count(*) FILTER (WHERE status = 'solved')                AS solved,
   round(100.0 * count(*) FILTER (WHERE status = 'solved')
-        / nullif(count(*) FILTER (WHERE status <> 'open'), 0), 1) AS solve_rate_pct
+        / nullif(count(*) FILTER (WHERE status <> 'open'), 0), 1) AS solve_rate_pct,
+  count(*) FILTER (WHERE status = 'abandoned')             AS abandoned,     -- ADR-014 guardrail
+  round(100.0 * count(*) FILTER (WHERE status = 'abandoned')
+        / nullif(count(*) FILTER (WHERE status <> 'open'), 0), 1) AS abandonment_rate_pct
 FROM app.problems
 GROUP BY 1, 2;

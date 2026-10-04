@@ -111,6 +111,36 @@
 - **Why:** one definition, so client/server drift and accidental field leaks (exact location)
   become type and test failures.
 
+### ADR-013 · Progress updates on every problem
+- **Status:** Accepted (founder request)
+- **Decision:** each problem has a public timeline of `problem_updates` (status + text + up to 3
+  photos), with the latest asker update pinned on the tab and summarised on the map card. On
+  issues, affected users and helpers can post too. This replaces the earlier issue-only
+  `incident_updates`.
+- **Why:** helpers need the *current* need, not the original description. One timeline for both
+  kinds is simpler than two mechanisms.
+
+### ADR-014 · Asker check-in rule with abandonment penalty
+- **Status:** Accepted (founder request); numbers to be tuned (Q11)
+- **Decision:** open problems have a check-in deadline per (kind, urgency). Missing it plus a
+  grace period → `abandoned`, removed from the map, −5 karma (escalating). Withdraw is always
+  free. This replaces fixed TTL + manual "extend".
+- **Why:** keeps the map live, protects helpers' time, and gives askers a reason to confirm
+  solved (the top risk to the core loop).
+- **Trade-off:** a penalty can feel harsh and might discourage posting. Mitigations are
+  reminders, one-tap answers, grace, free withdraw, a small first penalty, moderator voiding, and
+  tracking abandonment rate and posting rate as guardrail metrics.
+- **Note:** this is a *system* penalty. Users still can't give each other negative karma
+  (anti-retaliation, Theory §6).
+
+### ADR-015 · Open category catalogue in groups
+- **Status:** Accepted (founder request)
+- **Decision:** people can post any local problem. Categories are grouped (People · Environment ·
+  Roads & public spaces · Utilities · Safety · Other), config-driven, and each sets a default kind
+  and urgency.
+- **Why:** HelpIN covers human, environmental (dirty areas, rivers, ponds, parks) and
+  infrastructure problems. Grouping keeps the create flow to two taps.
+
 ---
 
 ## 2. Open questions for the founder
@@ -129,3 +159,6 @@ These change the plan. Everything else has a sensible default already chosen abo
 | **Q8** | **Brand spelling:** "HelpIN", "Helpin", or "HelpIn"? | "HelpIN" in docs (repo name) | Store listing, logo, copy |
 | **Q9** | **Team & budget:** solo founder + AI assistant? Any designer? | Solo + AI; design from a simple token system | Phase sizing, design-system effort |
 | **Q10** | **Moderation staffing:** who reviews reports in the beta? | Founder, with a 24 h SLA, and 2 h for `serious` | Safety promises we can actually keep |
+| **Q11** | **Check-in numbers:** are the intervals (request 72 h / 24 h / 6 h; issue 7 d / 3 d / 12 h) and the penalty (−5, then −10, then posting limit) right? | As written in Domain §4.7 and K-12/K-13 | Too strict → people stop posting; too loose → ghost problems |
+| **Q12** | **Issue steward handover** (R-56) in the first release, or simply remove abandoned issues at first? | Include it. Otherwise a long-running civic issue with 20 affected neighbours disappears because one person went quiet. | Build effort vs. fairness to affected neighbours |
+| **Q13** | **Should helpers' own updates count as check-ins?** | No. Only the asker's actions count, as you asked | Strictness of the activity rule |

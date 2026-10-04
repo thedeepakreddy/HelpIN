@@ -7,13 +7,16 @@ area, neighbours offer help, and the person who asked confirms when it's solved.
 close automatically, and helpers earn karma. A separate local photo feed exists, but it stays
 secondary to the problem-solving loop.
 
-> **Status:** design phase. This repository currently holds the product theory and architecture
-> the app will be built from. No application code yet.
+> **Status:** planning. This repository holds the plan, theory and architecture the app will be
+> built from. No application code will be written until the plan is agreed.
+
+**Start here → [HelpIN MVP Plan v2](docs/00-helpin-plan.md)**, the complete plan in one document.
 
 ## Documents
 
 | # | Doc | What it answers |
 |---|---|---|
+| 00 | [**MVP Plan v2**](docs/00-helpin-plan.md) | The whole plan in one place: the original plan + 7 strengthenings + progress updates, the stay-active rule and open categories |
 | 01 | [Product Theory](docs/01-product-theory.md) | Why this should exist, why people help, cold start, problem taxonomy (requests vs issues), karma & safety theory, feed guardrails, metrics, risks |
 | 02 | [Domain Model](docs/02-domain-model.md) | Vocabulary, modules, entities, state machines, and the numbered rulebook (`R-`, `K-`, `L-`, `C-`, `F-`, `S-`) |
 | 03 | [Architecture](docs/03-architecture.md) | Stack, modular monolith, data layer, outbox/worker, media pipeline, notifications, realtime, API, mobile app, security, testing, deployment, scaling, extension points |
@@ -24,7 +27,11 @@ secondary to the problem-solving loop.
 ## The plan in one screen
 
 - **Core loop:** Create problem → approximate area → photos → nearby map → *I can help* → chat →
-  solution → asker confirms → auto-close → karma.
+  progress updates → solution → asker confirms → auto-close → karma.
+- **Any problem:** people, environment (dirty areas, rivers, lakes, ponds, parks), roads,
+  utilities, safety, or anything else.
+- **Live or gone:** the asker keeps the problem updated on its tab. If they go silent past the
+  deadline, the tab is removed automatically and they lose karma. Withdrawing is always free.
 - **Two kinds of problems:** *requests* (a neighbour can solve it, the asker confirms) and
   *issues* (shared/civic, many affected, "Same here" + quorum resolution).
 - **Incidents from day one:** the map shows incidents. Duplicates are grouped manually now

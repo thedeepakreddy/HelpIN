@@ -16,6 +16,9 @@
 | Duplicate grouping deferred to AI | `incidents` from day one + manual **"Same here"** | AI later becomes a background job, with labelled data already collected. |
 | Photos: just "upload" | One media pipeline with **EXIF/GPS stripping** | Photos otherwise leak exact locations. |
 | No launch strategy | Phase 7: one launch area, founding helpers, liquidity gate | Hyperlocal apps live or die on local density. |
+| Problem details fixed after posting | **Progress updates** timeline on every problem tab (Phase 2) | Helpers need to know what is still needed *now*. |
+| Problems stay until closed | **Check-in rule:** asker must keep updating; silence → removed + karma penalty (Phase 4) | Keeps the map live and fixes the "never confirmed" problem. |
+| A short category list | **Any problem:** People, Environment (garbage, rivers, ponds, parks…), Roads, Utilities, Safety, Other | Matches what people actually need to post. |
 
 ---
 
@@ -51,17 +54,21 @@ block list; account deletion; `GET /meta/config`.
 ### Phase 2 — Problems on the map · L
 
 **Scope:** media pipeline (signed upload → worker strips EXIF → WebP sizes); create-problem flow
-(category → similar incidents / "Same here" → details → area & precision → photos → urgency with
-112 interstitial); incidents created 1:1; map endpoint (incident & cluster modes) with hexagon
-rendering; incident detail screen; withdraw/extend; expiry cron; report a problem; launch-area
-check.
+(group → category → similar incidents / "Same here" → details → area & precision → photos →
+urgency with 112 interstitial); full category catalogue (Domain §11); incidents created 1:1; map
+endpoint (incident & cluster modes) with hexagon rendering; incident detail screen; **progress
+updates** (statuses, text, photos, pinned latest, timeline, "Updated X ago" on cards); withdraw;
+max-lifetime expiry; report a problem or update; launch-area check.
 
 **Exit criteria**
 - User A creates a problem with a photo. User B, ~1 km away, sees it on the map as a hexagon area
   and opens it.
 - Downloaded problem photos contain **no EXIF/GPS** (automated test on a GPS-tagged fixture).
 - No public endpoint response contains exact coordinates (contract/privacy test green).
-- Problems expire on time and leave the map (R-01, R-05 tests).
+- Problems that reach max lifetime leave the map (R-01, R-05 tests).
+- The asker posts a "Partly solved" update with a photo. Another user sees it pinned on the
+  problem tab and summarised on the map card (R-40, R-41). The photo shows under the asker's
+  Problem photos, never the feed (R-44).
 - "Same here" increases `affected_count` and no new problem is created (R-30).
 
 ### Phase 3 — The help loop · L  ← **the heart of the MVP**
@@ -78,17 +85,23 @@ notifications + in-app notification inbox; report/block for offers and messages.
 - Blocking during a chat makes it read-only for both (C-04).
 - Killing the app mid-chat and reopening shows every message (Realtime healing).
 
-### Phase 4 — Liquidity & issues · M
+### Phase 4 — Liquidity, accountability & issues · M
 
 **Scope:** nearby fan-out (rings, categories, daily caps, quiet hours, ranking, second wave);
-solve reminders (24 h / 72 h) with one-tap confirm from the notification; expiry warnings; issue
-kind: updates, "Fixed now" quorum (R-21), credit-after-solve (R-22); honest empty states;
+**asker check-in rule** (deadlines per kind/urgency, reminders at 75% and deadline, grace
+period with final warning, auto-abandon, −5/−10 karma penalties, `on_notice` limit, reliability %,
+issue steward handover); one-tap "Still need help" / "It's solved" / "Withdraw" from the
+notification; helper update notifications (batched); issue kind: updates, "Fixed now" quorum (R-21), credit-after-solve (R-22); honest empty states;
 list-view toggle on the map.
 
 **Exit criteria**
 - A new problem pushes to eligible nearby users within 60 s (p95) and never to blocked users,
   the asker, or users over cap (tests).
 - An issue with 3 "Fixed now" confirmations auto-solves (R-21).
+- Time-travel tests for the full check-in cycle: reminder → deadline → grace → `abandoned` +
+  penalty; any check-in at any step resets the clock; withdraw never penalises; reaching max
+  lifetime expires without penalty (R-50…R-57, K-12…K-14).
+- Escalation: the 3rd abandonment in 30 days puts the user on notice (1 problem/day for 14 days).
 - The confirm-solved prompt can be completed from the notification without opening the full app flow.
 
 > **Core MVP complete.** The full loop works and is testable. A closed beta (Phase 7 step 1) can
@@ -176,6 +189,9 @@ flowchart LR
 | 17 | Nearby users get notified of new problems, within their limits | 4 |
 | 18 | Serious urgency shows the "not an emergency service, call 112" interstitial ⚑ | 2 |
 | 19 | Users can delete their account in-app | 1 |
+| 20 | The asker can post progress updates (status, text, photos) that helpers see pinned on the problem tab | 2 |
+| 21 | A problem whose asker stops updating is removed automatically and the asker loses karma, after reminders and a grace period | 4 |
+| 22 | Any kind of local problem can be posted: people, environment (dirty areas, rivers, ponds, parks), roads, utilities, safety, other | 2 |
 
 ---
 
