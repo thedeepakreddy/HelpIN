@@ -27,6 +27,7 @@ import type {
   ReportInput,
   Session,
   SolverHistoryItem,
+  SignupInput,
   UploadTicket,
 } from '@helpin/contracts';
 import type { BBox, LatLng } from '@helpin/geo';
@@ -175,6 +176,22 @@ export class HelpInApi {
     this.setSession(s);
     return s.me;
   }
+  async signup(input: SignupInput): Promise<Me> {
+    const s = await this.post<Session>('/v1/auth/signup', input);
+    this.setSession(s);
+    return s.me;
+  }
+  async login(email: string, password: string): Promise<Me> {
+    const s = await this.post<Session>('/v1/auth/login', { email, password });
+    this.setSession(s);
+    return s.me;
+  }
+  async resetPassword(challengeId: string, code: string, password: string): Promise<Me> {
+    const s = await this.post<Session>('/v1/auth/password/reset', { challengeId, code, password });
+    this.setSession(s);
+    return s.me;
+  }
+  setPassword = (password: string, currentPassword?: string) => this.put<Me>('/v1/me/password', { password, ...(currentPassword ? { currentPassword } : {}) });
   async logout() {
     await this.post('/v1/auth/logout').catch(() => undefined);
     this.setSession(null);

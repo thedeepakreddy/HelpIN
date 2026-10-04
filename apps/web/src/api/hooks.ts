@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AlertPrefs, CreatePostInput, CreateProblemInput, PostUpdateInput, ProblemDetail, ProfileInput } from '@helpin/contracts';
+import type { AlertPrefs, CreatePostInput, CreateProblemInput, Me, PostUpdateInput, ProblemDetail, ProfileInput, SignupInput } from '@helpin/contracts';
 import type { BBox } from '@helpin/geo';
 import { api } from './index';
 
@@ -237,14 +237,17 @@ export const useSetHomeArea = () => useMeMutation((cell: string) => api.setHomeA
 
 export function useSession() {
   const qc = useQueryClient();
+  const signedIn = (me: Me) => {
+    qc.clear();
+    qc.setQueryData(qk.me, me);
+    return me;
+  };
   return {
     requestCode: (channel: 'sms' | 'email', destination: string) => api.requestCode(channel, destination),
-    verifyCode: async (challengeId: string, code: string) => {
-      const me = await api.verifyCode(challengeId, code);
-      qc.clear();
-      qc.setQueryData(qk.me, me);
-      return me;
-    },
+    verifyCode: async (challengeId: string, code: string) => signedIn(await api.verifyCode(challengeId, code)),
+    signup: async (input: SignupInput) => signedIn(await api.signup(input)),
+    login: async (email: string, password: string) => signedIn(await api.login(email, password)),
+    resetPassword: async (challengeId: string, code: string, password: string) => signedIn(await api.resetPassword(challengeId, code, password)),
     logout: async () => {
       await api.logout();
       qc.clear();

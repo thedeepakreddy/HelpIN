@@ -504,11 +504,13 @@ export interface Users {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   email: string | null;
+  email_verified_at: Timestamp | null;
   guidelines_accepted_at: Timestamp | null;
   id: Generated<string>;
   last_seen_at: Timestamp | null;
   on_notice_until: Timestamp | null;
   onboarded_at: Timestamp | null;
+  password_hash: string | null;
   phone_e164: string | null;
   phone_verified_at: Timestamp | null;
   role: Generated<string>;

@@ -3,11 +3,15 @@ import { z } from 'zod';
 import { CATEGORY_GROUPS, LANGUAGES, LAUNCH_AREA, LIMITS, RATE_LIMITS, URGENCY } from '@helpin/config';
 import {
   AlertPrefsSchema,
+  LoginInputSchema,
   OnboardingInputSchema,
   OtpRequestSchema,
   OtpVerifySchema,
+  PasswordResetInputSchema,
+  PasswordSchema,
   ProfileInputSchema,
   PushSubscriptionInputSchema,
+  SignupInputSchema,
   type AlertPrefs,
   type KarmaEntry,
   type Me,
@@ -20,6 +24,7 @@ import { DAY, now } from '../platform/clock';
 import type { Ctx } from '../platform/context';
 import { newTotpSecret, randomToken, sha256, sixDigitCode, verifyTotp } from '../platform/crypto';
 import { adminEmails } from '../platform/env';
+import { hashPassword, verifyPassword } from '../platform/password';
 import { ApiError, badRequest, conflict, forbidden, notFound, tooMany, unauthorized } from '../platform/errors';
 import { iso, parse } from '../platform/http';
 import { rateLimit } from '../platform/ratelimit';
@@ -169,7 +174,8 @@ export async function buildMe(ctx: Ctx, userId: string, mfaVerified: boolean): P
   const onboarding = {
     adultConfirmed: !!u.adult_confirmed_at,
     guidelinesAccepted: !!u.guidelines_accepted_at,
-    profileDone: !!profile,
+    // The sign-up form creates the profile with just a name; languages finish it.
+    profileDone: !!profile && profile.languages.length > 0,
     homeAreaSet: !!profile?.home_cell_r7,
     done: !!u.onboarded_at,
   };
@@ -187,6 +193,7 @@ export async function buildMe(ctx: Ctx, userId: string, mfaVerified: boolean): P
     verified: !!u.phone_verified_at,
     role: u.role as Me['role'],
     phoneVerified: !!u.phone_verified_at,
+    hasPassword: !!u.password_hash,
     phoneMasked: u.phone_e164 ? maskPhone(u.phone_e164) : null,
     email: u.email,
     bio: profile?.bio ?? '',
@@ -218,9 +225,10 @@ export async function buildMe(ctx: Ctx, userId: string, mfaVerified: boolean): P
 
 /** Onboarding is done once every step is complete (ADR-018, S-01, L-05). */
 async function refreshOnboarded(ctx: Ctx, userId: string) {
-  const u = await ctx.db.selectFrom('users').select(['phone_verified_at', 'adult_confirmed_at', 'guidelines_accepted_at', 'onboarded_at']).where('id', '=', userId).executeTakeFirstOrThrow();
+  const u = await ctx.db.selectFrom('users').select(['adult_confirmed_at', 'guidelines_accepted_at', 'onboarded_at']).where('id', '=', userId).executeTakeFirstOrThrow();
   const p = await ctx.db.selectFrom('profiles').select('home_cell_r7').where('user_id', '=', userId).executeTakeFirst();
-  const done = !!(u.phone_verified_at && u.adult_confirmed_at && u.guidelines_accepted_at && p?.home_cell_r7);
+  // The phone is verified later, when someone first raises or offers help on a problem.
+  const done = !!(u.adult_confirmed_at && u.guidelines_accepted_at && p?.home_cell_r7);
   if (done && !u.onboarded_at) await ctx.db.updateTable('users').set({ onboarded_at: now() }).where('id', '=', userId).execute();
 }
 
@@ -342,11 +350,87 @@ export function identityRoutes(app: FastifyInstance, ctx: Ctx) {
     } else if (ch.channel === 'sms') {
       await ctx.db.updateTable('users').set({ phone_verified_at: t }).where('id', '=', user.id).where('phone_verified_at', 'is', null).execute();
     }
+    if (ch.channel === 'email') {
+      const acct = await ctx.db.selectFrom('users').select(['email_verified_at', 'password_hash']).where('id', '=', user.id).executeTakeFirstOrThrow();
+      if (!acct.email_verified_at) {
+        // The code proves who owns this address. If someone else signed up with it (sign-up
+        // doesn't check the email), their password and sessions stop working now.
+        await ctx.db.transaction().execute(async (tx) => {
+          await tx.updateTable('users').set({ email_verified_at: t, ...(acct.password_hash ? { password_hash: null } : {}) }).where('id', '=', user.id).execute();
+          if (acct.password_hash) await tx.updateTable('sessions').set({ revoked_at: t }).where('user_id', '=', user.id).where('revoked_at', 'is', null).execute();
+        });
+      }
+    }
     // ADR-023: the founder's email(s) become admin; kept in a private secret, not the repo.
     if (ch.channel === 'email' && adminEmails(ctx.env).has(ch.destination) && user.role !== 'admin') {
       await ctx.db.updateTable('users').set({ role: 'admin' }).where('id', '=', user.id).execute();
     }
     return issueSession(ctx, user.id, req.headers['user-agent']);
+  });
+
+  // ---- Sign-up form: name, email, password and the two agreements. No code needed to start;
+  // the phone is verified when the person first raises or offers help on a problem.
+  app.post('/v1/auth/signup', async (req) => {
+    const body = parse(SignupInputSchema, req.body);
+    const email = normalizeEmail(body.email);
+    if (!email) throw badRequest('VALIDATION', 'Enter a valid email address.');
+    await rateLimit(ctx.db, { key: req.ip }, 'signup_ip', { max: 10, windowHours: 1 }, 'Too many sign-ups from here. Try again in an hour.');
+    const existing = await ctx.db.selectFrom('users').select('id').where('email', '=', email).where('status', '!=', 'deleted').executeTakeFirst();
+    if (existing) throw conflict('EMAIL_TAKEN', 'There is already an account with this email. Log in instead.');
+    const passwordHash = await hashPassword(body.password);
+    const t = now();
+    const userId = await ctx.db.transaction().execute(async (tx) => {
+      const u = await tx
+        .insertInto('users')
+        .values({ email, password_hash: passwordHash, adult_confirmed_at: t, guidelines_accepted_at: t, created_at: t })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await tx.insertInto('profiles').values({ user_id: u.id, display_name: body.displayName, bio: '', languages: [], is_newcomer: false }).execute();
+      await tx.insertInto('alert_prefs').values({ user_id: u.id }).execute();
+      return u.id;
+    });
+    return issueSession(ctx, userId, req.headers['user-agent']);
+  });
+
+  app.post('/v1/auth/login', async (req) => {
+    const body = parse(LoginInputSchema, req.body);
+    const email = normalizeEmail(body.email);
+    const wrong = () => new ApiError(400, 'WRONG_PASSWORD', 'That email and password don’t match. Try again, or use a code instead.');
+    if (!email) throw wrong();
+    await rateLimit(ctx.db, { key: `login:${email}` }, 'login', { max: 10, windowHours: 1 }, 'Too many tries. Use “Forgot password?” or try again in an hour.');
+    await rateLimit(ctx.db, { key: req.ip }, 'login_ip', { max: 50, windowHours: 1 }, 'Too many tries. Try again in an hour.');
+    const user = await ctx.db.selectFrom('users').select(['id', 'password_hash', 'status']).where('email', '=', email).executeTakeFirst();
+    const ok = await verifyPassword(body.password, user?.status === 'deleted' ? null : user?.password_hash);
+    if (!user || !ok) throw wrong();
+    return issueSession(ctx, user.id, req.headers['user-agent']);
+  });
+
+  // ---- Forgot password: prove the email with a code from /v1/auth/otp, then choose a new password.
+  app.post('/v1/auth/password/reset', async (req) => {
+    const body = parse(PasswordResetInputSchema, req.body);
+    const ch = await consumeChallenge(ctx, body.challengeId, body.code, 'login');
+    if (ch.channel !== 'email') throw badRequest('VALIDATION', 'Use the code we emailed you.');
+    const user = await ctx.db.selectFrom('users').select('id').where('email', '=', ch.destination).where('status', '!=', 'deleted').executeTakeFirst();
+    if (!user) throw notFound('An account with this email');
+    const t = now();
+    await ctx.db.transaction().execute(async (tx) => {
+      await tx.updateTable('users').set({ password_hash: await hashPassword(body.password), email_verified_at: t }).where('id', '=', user.id).execute();
+      // A new password signs out every other device.
+      await tx.updateTable('sessions').set({ revoked_at: t }).where('user_id', '=', user.id).where('revoked_at', 'is', null).execute();
+    });
+    if (adminEmails(ctx.env).has(ch.destination)) await ctx.db.updateTable('users').set({ role: 'admin' }).where('id', '=', user.id).where('role', '!=', 'admin').execute();
+    return issueSession(ctx, user.id, req.headers['user-agent']);
+  });
+
+  app.put('/v1/me/password', async (req) => {
+    const user = await requireUser(ctx, req, { onboarded: false });
+    const body = parse(z.object({ currentPassword: z.string().max(128).optional(), password: PasswordSchema }), req.body);
+    const row = await ctx.db.selectFrom('users').select('password_hash').where('id', '=', user.id).executeTakeFirstOrThrow();
+    if (row.password_hash && !(await verifyPassword(body.currentPassword ?? '', row.password_hash))) {
+      throw new ApiError(400, 'WRONG_PASSWORD', 'Your current password is not right.');
+    }
+    await ctx.db.updateTable('users').set({ password_hash: await hashPassword(body.password) }).where('id', '=', user.id).execute();
+    return buildMe(ctx, user.id, user.mfa);
   });
 
   app.post('/v1/auth/refresh', async (req) => {

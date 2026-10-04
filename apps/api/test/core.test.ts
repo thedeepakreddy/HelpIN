@@ -13,6 +13,18 @@ beforeEach(async () => h.reset());
 
 const BBOX = '18.95,47.40,19.15,47.55';
 
+/** A signed-in test user from a session response (sign-up, log-in or code). */
+async function asUser(session: { me: { id: string } }) {
+  const sid = (await h.ctx.db.selectFrom('sessions').select('id').where('user_id', '=', session.me.id).orderBy('created_at', 'desc').executeTakeFirstOrThrow()).id;
+  return { id: session.me.id, sid, role: 'user' as const, mfa: false, name: '' };
+}
+
+async function onboard(u: Awaited<ReturnType<typeof asUser>>) {
+  await h.req(u, 'PATCH', '/v1/me/profile', { displayName: 'New', bio: '', languages: ['en'], isNewcomer: true });
+  await h.req(u, 'POST', '/v1/me/onboarding', { adult: true, guidelines: true });
+  await h.req(u, 'PUT', '/v1/me/home-area', { cell: latLngToCell(SPOT.bartok.lat, SPOT.bartok.lng, 7) });
+}
+
 describe('sign in and onboarding (ADR-018)', () => {
   it('logs in with a phone code, and rejects wrong codes with tries left', async () => {
     const otp = await h.req(null, 'POST', '/v1/auth/otp', { channel: 'sms', destination: '30 123 4567' });
@@ -41,19 +53,65 @@ describe('sign in and onboarding (ADR-018)', () => {
     expect((await h.req(null, 'POST', '/v1/auth/refresh', { refreshToken: s.body.refreshToken })).status).toBe(401);
   });
 
-  it('email sign-ups must verify a phone; one account per number', async () => {
+  it('accounts browse without a phone; raising and helping need one; one account per number', async () => {
     const taken = await h.user('Zsófi', { phone: '+36301112233' });
-    void taken;
+    const p = (await h.req(taken, 'POST', '/v1/problems', problemInput())).body;
     const otp = await h.req(null, 'POST', '/v1/auth/otp', { channel: 'email', destination: 'new@example.com' });
     const s = await h.req(null, 'POST', '/v1/auth/verify', { challengeId: otp.body.challengeId, code: otp.body.devCode });
-    const sid = (await h.ctx.db.selectFrom('sessions').select('id').where('user_id', '=', s.body.me.id).executeTakeFirstOrThrow()).id;
-    const u = { id: s.body.me.id, sid, role: 'user' as const, mfa: false, name: 'New' };
-    expect((await h.req(u, 'GET', `/v1/map?bbox=${BBOX}&zoom=14`)).body.error.code).toBe('PHONE_NOT_VERIFIED');
+    const u = await asUser(s.body);
+    expect((await h.req(u, 'GET', `/v1/map?bbox=${BBOX}&zoom=14`)).body.error.code).toBe('ONBOARDING_REQUIRED');
+    await onboard(u);
+    expect((await h.req(u, 'GET', `/v1/map?bbox=${BBOX}&zoom=14`)).status).toBe(200); // exploring needs no phone
+    expect((await h.req(u, 'GET', `/v1/problems/${p.id}`)).status).toBe(200);
+    expect((await h.req(u, 'POST', '/v1/problems', problemInput())).body.error.code).toBe('PHONE_NOT_VERIFIED');
+    expect((await h.req(u, 'POST', `/v1/problems/${p.id}/offers`, { message: null })).body.error.code).toBe('PHONE_NOT_VERIFIED');
     expect((await h.req(u, 'POST', '/v1/me/phone/otp', { phone: '+36301112233' })).body.error.code).toBe('PHONE_TAKEN');
     const ch = await h.req(u, 'POST', '/v1/me/phone/otp', { phone: '+36309998877' });
     const me = await h.req(u, 'POST', '/v1/me/phone/verify', { challengeId: ch.body.challengeId, code: ch.body.devCode });
     expect(me.body.phoneVerified).toBe(true);
-    expect((await h.req(u, 'GET', `/v1/map?bbox=${BBOX}&zoom=14`)).body.error.code).toBe('ONBOARDING_REQUIRED');
+    expect((await h.req(u, 'POST', `/v1/problems/${p.id}/offers`, { message: null })).status).toBe(200);
+  });
+
+  it('sign-up form, password log-in, change and reset', async () => {
+    const form = { displayName: 'Mira', email: 'Mira@Example.com', password: 'tulip-river-42', adult: true, guidelines: true };
+    const s = await h.req(null, 'POST', '/v1/auth/signup', form);
+    expect(s.status).toBe(200);
+    expect(s.body.me).toMatchObject({ displayName: 'Mira', email: 'mira@example.com', hasPassword: true, phoneVerified: false });
+    expect(s.body.me.onboarding).toMatchObject({ adultConfirmed: true, guidelinesAccepted: true, done: false });
+    const u = await asUser(s.body);
+    const home = await h.req(u, 'PUT', '/v1/me/home-area', { cell: latLngToCell(SPOT.bartok.lat, SPOT.bartok.lng, 7) });
+    expect(home.body.onboarding.done).toBe(true);
+    expect((await h.req(u, 'GET', '/v1/problems/nearby')).status).toBe(200);
+
+    expect((await h.req(null, 'POST', '/v1/auth/signup', { ...form, email: 'mira@example.com' })).body.error.code).toBe('EMAIL_TAKEN');
+    expect((await h.req(null, 'POST', '/v1/auth/signup', { ...form, email: 'x@example.com', password: 'short' })).status).toBe(400);
+    expect((await h.req(null, 'POST', '/v1/auth/signup', { ...form, email: 'y@example.com', adult: false })).status).toBe(400);
+
+    expect((await h.req(null, 'POST', '/v1/auth/login', { email: 'mira@example.com', password: 'wrong-password' })).body.error.code).toBe('WRONG_PASSWORD');
+    expect((await h.req(null, 'POST', '/v1/auth/login', { email: 'nobody@example.com', password: 'tulip-river-42' })).body.error.code).toBe('WRONG_PASSWORD');
+    expect((await h.req(null, 'POST', '/v1/auth/login', { email: ' MIRA@example.com ', password: 'tulip-river-42' })).body.me.id).toBe(u.id);
+
+    // Changing it needs the current one.
+    expect((await h.req(u, 'PUT', '/v1/me/password', { currentPassword: 'nope', password: 'new-password-1' })).body.error.code).toBe('WRONG_PASSWORD');
+    expect((await h.req(u, 'PUT', '/v1/me/password', { currentPassword: 'tulip-river-42', password: 'new-password-1' })).status).toBe(200);
+
+    // Forgot password: an email code, then a new password; other devices are signed out.
+    const otp = await h.req(null, 'POST', '/v1/auth/otp', { channel: 'email', destination: 'mira@example.com' });
+    const reset = await h.req(null, 'POST', '/v1/auth/password/reset', { challengeId: otp.body.challengeId, code: otp.body.devCode, password: 'brand-new-pass' });
+    expect(reset.body.me.id).toBe(u.id);
+    expect((await h.req(u, 'GET', '/v1/me')).status).toBe(401);
+    expect((await h.req(null, 'POST', '/v1/auth/login', { email: 'mira@example.com', password: 'new-password-1' })).body.error.code).toBe('WRONG_PASSWORD');
+    expect((await h.req(null, 'POST', '/v1/auth/login', { email: 'mira@example.com', password: 'brand-new-pass' })).status).toBe(200);
+  });
+
+  it('an email code takes an address back from someone who signed up with it', async () => {
+    const squat = await h.req(null, 'POST', '/v1/auth/signup', { displayName: 'Not Anna', email: 'anna@example.com', password: 'squatter-pass', adult: true, guidelines: true });
+    const squatter = await asUser(squat.body);
+    const otp = await h.req(null, 'POST', '/v1/auth/otp', { channel: 'email', destination: 'anna@example.com' });
+    const owner = await h.req(null, 'POST', '/v1/auth/verify', { challengeId: otp.body.challengeId, code: otp.body.devCode });
+    expect(owner.body.me.hasPassword).toBe(false);
+    expect((await h.req(squatter, 'GET', '/v1/me')).status).toBe(401);
+    expect((await h.req(null, 'POST', '/v1/auth/login', { email: 'anna@example.com', password: 'squatter-pass' })).body.error.code).toBe('WRONG_PASSWORD');
   });
 
   it('L-05: the home area is a res-7 cell inside Budapest, never a point', async () => {

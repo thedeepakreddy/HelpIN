@@ -285,6 +285,7 @@ export const MeSchema = PublicUserSchema.extend({
   role: z.enum(['user', 'moderator', 'admin']),
   phoneVerified: z.boolean(),
   phoneMasked: z.string().nullable(),
+  hasPassword: z.boolean(),
   email: z.string().nullable(),
   bio: z.string(),
   memberSince: isoDate,
@@ -382,6 +383,25 @@ export const OtpRequestSchema = z.object({
   destination: z.string().min(5).max(254),
 });
 export const OtpVerifySchema = z.object({ challengeId: z.string(), code: z.string().regex(/^\d{6}$/) });
+
+/** Passwords: 8+ characters, at most 128 (scrypt input). */
+export const PasswordSchema = z.string().min(8, 'Use at least 8 characters.').max(128);
+
+export const SignupInputSchema = z.object({
+  displayName: z.string().trim().min(1).max(50),
+  email: z.string().trim().min(5).max(254),
+  password: PasswordSchema,
+  adult: z.literal(true),
+  guidelines: z.literal(true),
+});
+export type SignupInput = z.infer<typeof SignupInputSchema>;
+
+export const LoginInputSchema = z.object({ email: z.string().trim().min(3).max(254), password: z.string().min(1).max(128) });
+export type LoginInput = z.infer<typeof LoginInputSchema>;
+
+/** Forgot password: an email code (from /v1/auth/otp) plus the new password. */
+export const PasswordResetInputSchema = z.object({ challengeId: z.string(), code: z.string().regex(/^\d{6}$/), password: PasswordSchema });
+export type PasswordResetInput = z.infer<typeof PasswordResetInputSchema>;
 
 export const CreateProblemInputSchema = z.object({
   categoryId: z.string(),

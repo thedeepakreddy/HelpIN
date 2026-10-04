@@ -15,6 +15,7 @@ import {
 } from '@helpin/config';
 import type { ProblemCard } from '@helpin/contracts';
 import { allowedPrecisions, type LatLng } from '@helpin/geo';
+import { usePhoneGate } from '../../components/domain/PhoneVerify';
 import { useCreateProblem, useMe, useSameHere, useSimilar } from '../../api/hooks';
 import { CategoryHex, GROUP_TONE, LanguageBadge, UrgencyBadge, categoryIcon } from '../../components/domain/problem';
 import { PhotoGrid, usePhotoUploads } from '../../components/domain/media';
@@ -66,6 +67,7 @@ export function CreateWizard() {
   const toast = useToast();
   const me = useMe();
   const create = useCreateProblem();
+  const phone = usePhoneGate(); // posting a problem needs a verified phone; filling it in doesn't
 
   const [step, setStep] = useState<Step>('category');
   const [flyTo, setFlyTo] = useState<{ center: LatLng; key: number } | null>(null);
@@ -172,6 +174,7 @@ export function CreateWizard() {
         </div>
       </header>
 
+      {phone.sheet}
       <main className="flex-1 px-5 pt-5 pb-32">
         {step === 'category' && (
           <>
@@ -430,7 +433,7 @@ export function CreateWizard() {
         <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/95 px-5 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur md:left-[248px]">
           <div className="mx-auto max-w-xl">
             {step === 'review' ? (
-              <Button size="lg" block loading={create.isPending} onClick={() => void submit()}>
+              <Button size="lg" block loading={create.isPending} onClick={() => phone.gate(() => void submit())}>
                 {t('create.review.post')}
               </Button>
             ) : (
@@ -495,6 +498,7 @@ function SimilarItem({ problem: p }: { problem: ProblemCard }) {
   const toast = useToast();
   const navigate = useNavigate();
   const same = useSameHere(p.id);
+  const phone = usePhoneGate();
   return (
     <div className="rounded-[20px] bg-white p-4 lip-card">
       <div className="flex items-start gap-3">
@@ -506,6 +510,7 @@ function SimilarItem({ problem: p }: { problem: ProblemCard }) {
           </p>
         </div>
       </div>
+      {phone.sheet}
       {p.kind === 'issue' ? (
         <Button
           size="sm"
@@ -513,13 +518,15 @@ function SimilarItem({ problem: p }: { problem: ProblemCard }) {
           block
           loading={same.isPending}
           onClick={() =>
-            same.mutate(true, {
-              onSuccess: () => {
-                toast(t('create.similar.joined'));
-                void navigate({ to: '/p/$problemId', params: { problemId: p.id } });
-              },
-              onError: (e) => toast(errorMessage(e, t), 'error'),
-            })
+            phone.gate(() =>
+              same.mutate(true, {
+                onSuccess: () => {
+                  toast(t('create.similar.joined'));
+                  void navigate({ to: '/p/$problemId', params: { problemId: p.id } });
+                },
+                onError: (e) => toast(errorMessage(e, t), 'error'),
+              }),
+            )
           }
         >
           {t('create.similar.sameHere')}

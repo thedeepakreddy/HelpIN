@@ -38,8 +38,12 @@ pnpm db:seed                               # a believable week in District XI
 pnpm dev
 ```
 
-Open http://localhost:5173 and sign in with a demo phone number and the code **123456**
-(`AUTH_DEV_CODE`; the API also prints every code it "sends" to its log):
+Open http://localhost:5173 and either **create an account** with the form (name, email,
+password), or tap **"Use a code instead"** and sign in as a demo neighbour with a phone number
+and the code **123456** (`AUTH_DEV_CODE`; the API also prints every code it "sends" to its log).
+New accounts can explore right away; the app asks to verify a phone the first time you post a
+problem or offer help (ADR-030).
+
 
 | Phone | Who |
 |---|---|

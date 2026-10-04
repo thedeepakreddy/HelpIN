@@ -21,7 +21,8 @@ const offerSnap = (o: OfferRow): OfferSnapshot => ({ id: o.id, problemId: o.prob
 /** Help offers (R-10…R-16) and the conversation that opens on accept (R-13, C-02). */
 export function helpRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/v1/problems/:id/offers', async (req) => {
-    const user = await requireUser(ctx, req, { write: true });
+    // Raising or helping with a problem needs a verified phone (it keeps neighbours safe).
+    const user = await requireUser(ctx, req, { write: true, verified: true });
     const id = (req.params as { id: string }).id;
     const { message } = parse(z.object({ message: z.string().max(LIMITS.offerMessage).nullable() }), req.body);
     await rateLimit(ctx.db, { userId: user.id }, 'offer', RATE_LIMITS.offerHelp);

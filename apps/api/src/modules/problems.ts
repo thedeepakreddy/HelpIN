@@ -408,7 +408,8 @@ export function problemRoutes(app: FastifyInstance, ctx: Ctx) {
 
   // ---- Create (L-01…L-03, L-10, S-02, A-01, A-05)
   app.post('/v1/problems', async (req) => {
-    const user = await requireUser(ctx, req, { write: true });
+    // Raising or helping with a problem needs a verified phone (it keeps neighbours safe).
+    const user = await requireUser(ctx, req, { write: true, verified: true });
     const input = parse(CreateProblemInputSchema, req.body);
     let category;
     try {
@@ -569,7 +570,8 @@ export function problemRoutes(app: FastifyInstance, ctx: Ctx) {
 
   // ---- "Same here" (R-30) and "Fixed now" (R-21)
   app.post('/v1/problems/:id/affected', async (req) => {
-    const user = await requireUser(ctx, req, { write: true });
+    // Raising or helping with a problem needs a verified phone (it keeps neighbours safe).
+    const user = await requireUser(ctx, req, { write: true, verified: true });
     const id = (req.params as { id: string }).id;
     const row = await loadProblemRow(ctx, id);
     if (!row || row.hidden_at) throw notFound('That problem');
@@ -602,7 +604,8 @@ export function problemRoutes(app: FastifyInstance, ctx: Ctx) {
   });
 
   app.post('/v1/problems/:id/fixed', async (req) => {
-    const user = await requireUser(ctx, req, { write: true });
+    // Raising or helping with a problem needs a verified phone (it keeps neighbours safe).
+    const user = await requireUser(ctx, req, { write: true, verified: true });
     const id = (req.params as { id: string }).id;
     await ctx.db.transaction().execute(async (tx) => {
       const p = await tx.selectFrom('problems').select(['id', 'incident_id', 'status', 'kind', 'owner_id']).where('id', '=', id).forUpdate().executeTakeFirst();

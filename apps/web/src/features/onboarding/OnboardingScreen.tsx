@@ -1,11 +1,11 @@
-import { Suspense, lazy, useState, type FormEvent } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { Bell, Check, HeartHandshake, MapPin, Share, ShieldCheck, Smartphone, Sparkles } from 'lucide-react';
+import { Bell, Check, HeartHandshake, MapPin, Share, ShieldCheck, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES } from '@helpin/config';
 import { latLngToCell } from 'h3-js';
 import { api } from '../../api';
-import { useMe, useMeMutation, useSession, useSetHomeArea, useUpdateProfile } from '../../api/hooks';
+import { useMe, useMeMutation, useSetHomeArea, useUpdateProfile } from '../../api/hooks';
 import { Hexie, Logo } from '../../components/domain/Hexies';
 import { usePhotoUploads } from '../../components/domain/media';
 import { Button } from '../../components/ui/Button';
@@ -18,17 +18,22 @@ import { DEFAULT_VIEW } from '../problems/mapStyle';
 
 const LocationPicker = lazy(() => import('../create/LocationPicker').then((m) => ({ default: m.LocationPicker })));
 
-type Step = 'phone' | 'welcome' | 'profile' | 'area' | 'notifications';
+type Step = 'welcome' | 'profile' | 'area' | 'notifications';
 
-/** Onboarding (Roadmap Phase 1): phone · 18+ & guidelines · profile · home area · notifications. */
+/**
+ * Onboarding (Roadmap Phase 1): 18+ & guidelines · profile · home area · notifications. The
+ * sign-up form already covers the first step. The phone is verified later, only when someone
+ * raises or offers help on a problem.
+ */
 export function OnboardingScreen() {
   const { t } = useTranslation();
   const me = useMe();
   const [finishing, setFinishing] = useState(false);
-  if (!me.data) return null;
-  const o = me.data.onboarding;
-  const step: Step = !me.data.phoneVerified ? 'phone' : !o.adultConfirmed || !o.guidelinesAccepted ? 'welcome' : !o.profileDone ? 'profile' : !o.homeAreaSet ? 'area' : 'notifications';
-  const steps: Step[] = ['phone', 'welcome', 'profile', 'area', 'notifications'];
+  const o = me.data?.onboarding;
+  // Fixed when the screen opens, so the step counter doesn't jump.
+  const [steps] = useState<Step[]>(() => (o && o.adultConfirmed && o.guidelinesAccepted ? ['profile', 'area', 'notifications'] : ['welcome', 'profile', 'area', 'notifications']));
+  if (!me.data || !o) return null;
+  const step: Step = !o.adultConfirmed || !o.guidelinesAccepted ? 'welcome' : !o.profileDone ? 'profile' : !o.homeAreaSet ? 'area' : 'notifications';
   const index = steps.indexOf(finishing ? 'notifications' : step);
 
   return (
@@ -44,7 +49,6 @@ export function OnboardingScreen() {
           <div className="h-full rounded-full bg-brand transition-[width] duration-300" style={{ width: `${((index + 1) / steps.length) * 100}%` }} />
         </div>
         <main className="mt-7 flex flex-1 flex-col">
-          {step === 'phone' && <PhoneStep />}
           {step === 'welcome' && <WelcomeStep />}
           {step === 'profile' && <ProfileStep />}
           {step === 'area' && <AreaStep onDone={() => setFinishing(true)} />}
@@ -71,69 +75,6 @@ function Title({ icon, title, body }: { icon: React.ReactNode; title: string; bo
       <h1 className="font-display text-[30px] leading-tight font-extrabold tracking-tight">{title}</h1>
       <p className="mt-1.5 text-[15px] leading-relaxed text-ink-2">{body}</p>
     </div>
-  );
-}
-
-/* ------------------------------------------------------------------ 1. Phone (ADR-018) */
-
-function PhoneStep() {
-  const { t } = useTranslation();
-  const toast = useToast();
-  const session = useSession();
-  const [phone, setPhone] = useState('');
-  const [challenge, setChallenge] = useState<{ id: string; sentTo: string; devCode?: string } | null>(null);
-  const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
-  const verify = useMeMutation((v: { id: string; code: string }) => api.verifyPhone(v.id, v.code));
-
-  async function send(e: FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      const c = await api.requestPhoneCode(phone.trim().startsWith('+') ? phone.trim() : `+36${phone.replace(/\D/g, '')}`);
-      setChallenge({ id: c.challengeId, sentTo: c.sentTo, devCode: c.devCode });
-    } catch (err) {
-      toast(errorMessage(err, t), 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      <Title icon={<Smartphone size={24} />} title={t('onboarding.phone.title')} body={t('onboarding.phone.body')} />
-      {!challenge ? (
-        <form onSubmit={send} className="flex flex-col gap-4">
-          <TextField label={t('login.phoneLabel')} type="tel" inputMode="tel" autoComplete="tel" placeholder="+36 30 123 4567" value={phone} onChange={(e) => setPhone(e.target.value)} />
-          <Button type="submit" size="lg" block loading={busy} disabled={phone.replace(/\D/g, '').length < 9}>
-            {t('login.sendCode')}
-          </Button>
-        </form>
-      ) : (
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            verify.mutate({ id: challenge.id, code }, { onError: (err) => toast(errorMessage(err, t), 'error') });
-          }}
-          className="flex flex-col gap-4"
-        >
-          <TextField
-            label={`${t('login.codeLabel')} · ${challenge.sentTo}`}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-            hint={challenge.devCode ? t('login.devCode', { code: challenge.devCode }) : undefined}
-          />
-          <Button type="submit" size="lg" block loading={verify.isPending} disabled={code.length !== 6}>
-            {t('login.verify')}
-          </Button>
-        </form>
-      )}
-      <Button variant="ghost" className="mt-auto" onClick={() => void session.logout()}>
-        {t('profile.logout')}
-      </Button>
-    </>
   );
 }
 

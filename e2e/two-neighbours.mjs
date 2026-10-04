@@ -25,6 +25,7 @@ async function signIn(local) {
   page.on('pageerror', (e) => errors.push(`${local}: ${e.message}`));
   page.on('console', (m) => m.type() === 'error' && !/tile|openfreemap|Failed to load resource/i.test(m.text()) && errors.push(`${local}: ${m.text()}`));
   await page.goto(`${WEB}/login?mode=login`);
+  await page.getByRole('button', { name: 'Use a code instead' }).click();
   await page.getByPlaceholder('30 123 4567').fill(local);
   await page.getByRole('button', { name: 'Send code' }).click();
   await page.getByPlaceholder('••••••').fill('123456');

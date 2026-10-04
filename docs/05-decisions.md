@@ -298,6 +298,23 @@
   one connection per open tab; Architecture §14's scaling notes apply (sticky sessions are not
   required because every API process listens to Postgres).
 
+### ADR-030 · Sign up with a form; verify the phone when raising or helping
+- **Status:** Accepted (revises ADR-018)
+- **Decision:** people can create an account with a form (name, email, password, 18+ and the
+  community guidelines) or sign in with a one-time code, and explore everything straight away:
+  map, problems, feed, communities, profiles and chat they're part of. A **verified phone is
+  required at the moment someone raises a problem, offers help, says "Same here" or votes
+  "Fixed"**; the app asks for it right there and then continues the action. Passwords are
+  hashed with scrypt; "Forgot password?" uses an email code. An email code always wins over a
+  password: if someone signed up with an address that isn't theirs, the owner's first email
+  code clears that password and signs out its sessions. Admin rights still come only from an
+  email code (ADR-023).
+- **Why:** asking for a phone number before people have seen anything loses many of them,
+  especially newcomers. The phone protects the actions that affect other people (one person
+  per number for problems and help), which is where the check now sits.
+- **Trade-off:** posts, comments and likes no longer need a verified phone, so report-based
+  moderation (S-05) and rate limits carry more of the anti-spam load there.
+
 ---
 
 ## 2. Open questions for the founder

@@ -82,8 +82,9 @@ export async function optionalUser(ctx: Ctx, req: FastifyRequest): Promise<Authe
 }
 
 /**
- * Every endpoint except sign-in and onboarding needs a verified phone and finished onboarding
- * (ADR-018). Restricted accounts can read but not create (S-09).
+ * Endpoints need a signed-in user who finished onboarding. A verified phone is only required
+ * where it protects other people: raising a problem and offering help (`verified: true`).
+ * Restricted accounts can read but not create (S-09).
  */
 export async function requireUser(
   ctx: Ctx,
@@ -92,7 +93,7 @@ export async function requireUser(
 ): Promise<AuthedUser> {
   const user = await optionalUser(ctx, req);
   if (!user) throw unauthorized();
-  if ((opts.verified ?? true) && !user.phoneVerified) throw forbidden('PHONE_NOT_VERIFIED', 'Please verify your phone number first.');
+  if (opts.verified && !user.phoneVerified) throw forbidden('PHONE_NOT_VERIFIED', 'Please verify your phone number first.');
   if ((opts.onboarded ?? true) && !user.onboarded) throw forbidden('ONBOARDING_REQUIRED', 'Please finish setting up your account.');
   if (opts.write && user.status === 'restricted') throw forbidden('ACCOUNT_RESTRICTED', 'Your account is restricted. Check your notifications for details.');
   return user;

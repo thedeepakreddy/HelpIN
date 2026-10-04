@@ -1,15 +1,16 @@
 import { Suspense, lazy, useState, type ReactNode } from 'react';
 import { Link, useRouter } from '@tanstack/react-router';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Bell, Download, LogOut, MapPin, Shield, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, Bell, BadgeCheck, Download, KeyRound, LogOut, MapPin, Shield, Smartphone, Trash2, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES } from '@helpin/config';
 import type { AlertPrefs, Me } from '@helpin/contracts';
 import { latLngToCell } from 'h3-js';
 import { cellCenter } from '@helpin/geo';
 import { api } from '../../api';
-import { qk, useBlocks, useMe, useSession, useSetAlertPrefs, useSetHomeArea, useUpdateProfile } from '../../api/hooks';
+import { qk, useBlocks, useMe, useMeMutation, useSession, useSetAlertPrefs, useSetHomeArea, useUpdateProfile } from '../../api/hooks';
 import { Photo, usePhotoUploads } from '../../components/domain/media';
+import { PhoneVerifyForm } from '../../components/domain/PhoneVerify';
 import { Button, IconButton } from '../../components/ui/Button';
 import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
@@ -323,6 +324,11 @@ function AccountSection({ me }: { me: Me }) {
   const [confirm, setConfirm] = useState(false);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
+  const [phoneOpen, setPhoneOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const savePassword = useMeMutation((v: { password: string; current?: string }) => api.setPassword(v.password, v.current));
 
   async function exportData() {
     try {
@@ -340,13 +346,32 @@ function AccountSection({ me }: { me: Me }) {
 
   return (
     <Section icon={<UserRound size={20} />} title={t('settings.account')}>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[14px]">
+      <dl className="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-1.5 text-[14px]">
         <dt className="text-muted">{t('settings.phone')}</dt>
-        <dd className="font-semibold">{me.phoneMasked ?? '—'}</dd>
+        <dd className="flex items-center gap-1.5 font-semibold">
+          {me.phoneVerified ? (
+            <>
+              {me.phoneMasked}
+              <BadgeCheck size={16} className="text-brand" aria-label={t('settings.phoneVerified')} />
+            </>
+          ) : (
+            <span className="text-ink-2">{t('settings.phoneNotVerified')}</span>
+          )}
+        </dd>
         <dt className="text-muted">{t('settings.email')}</dt>
-        <dd className="font-semibold">{me.email ?? '—'}</dd>
+        <dd className="font-semibold break-all">{me.email ?? '—'}</dd>
       </dl>
       <div className="mt-4 flex flex-col gap-2">
+        {!me.phoneVerified && (
+          <Button block icon={<Smartphone size={18} />} onClick={() => setPhoneOpen(true)}>
+            {t('settings.verifyPhone')}
+          </Button>
+        )}
+        {me.email && (
+          <Button variant="secondary" block icon={<KeyRound size={18} />} onClick={() => setPasswordOpen(true)}>
+            {me.hasPassword ? t('settings.changePassword') : t('settings.setPassword')}
+          </Button>
+        )}
         <Button variant="secondary" block icon={<Download size={18} />} onClick={() => void exportData()}>
           {t('settings.export')}
         </Button>
@@ -357,6 +382,49 @@ function AccountSection({ me }: { me: Me }) {
           {t('settings.delete')}
         </Button>
       </div>
+      <Sheet open={phoneOpen} onOpenChange={setPhoneOpen} title={t('phoneGate.title')} description={t('settings.verifyPhoneBody')}>
+        <PhoneVerifyForm
+          onVerified={() => {
+            setPhoneOpen(false);
+            toast(t('settings.phoneDone'));
+          }}
+        />
+      </Sheet>
+      <Sheet
+        open={passwordOpen}
+        onOpenChange={(o) => {
+          setPasswordOpen(o);
+          setCurrent('');
+          setNext('');
+        }}
+        title={me.hasPassword ? t('settings.changePassword') : t('settings.setPassword')}
+        description={me.hasPassword ? undefined : t('settings.setPasswordBody')}
+      >
+        <form
+          className="flex flex-col gap-3.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            savePassword.mutate(
+              { password: next, current: me.hasPassword ? current : undefined },
+              {
+                onSuccess: () => {
+                  setPasswordOpen(false);
+                  setCurrent('');
+                  setNext('');
+                  toast(t('settings.passwordSaved'));
+                },
+                onError: (err) => toast(errorMessage(err, t), 'error'),
+              },
+            );
+          }}
+        >
+          {me.hasPassword && <TextField label={t('settings.currentPassword')} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />}
+          <TextField label={t('login.newPassword')} type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} hint={t('login.passwordHint', { count: 8 })} />
+          <Button type="submit" size="lg" block loading={savePassword.isPending} disabled={next.length < 8 || (me.hasPassword && !current)}>
+            {t('settings.save')}
+          </Button>
+        </form>
+      </Sheet>
       <Sheet
         open={confirm}
         onOpenChange={setConfirm}

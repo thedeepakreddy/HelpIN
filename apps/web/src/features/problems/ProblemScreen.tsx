@@ -49,6 +49,7 @@ import { errorMessage } from '../../lib/errors';
 import { hoursLeft, relativeTime } from '../../lib/time';
 import { tone } from '../../lib/tones';
 import { DEFAULT_VIEW } from './mapStyle';
+import { usePhoneGate } from '../../components/domain/PhoneVerify';
 import { ConfirmSolvedSheet, OfferSheet, UpdateSheet, WithdrawSheet } from './ProblemSheets';
 
 type SheetName = 'offer' | 'update' | 'solved' | 'credit' | 'withdraw' | null;
@@ -725,6 +726,7 @@ function ActionBar({
   const toast = useToast();
   const sameHere = useSameHere(p.id);
   const fixed = useFixedNow(p.id);
+  const phone = usePhoneGate(); // raising and helping need a verified phone
   const withdrawOffer = useWithdrawOffer();
   const claim = useClaimSolved();
   const onError = (e: unknown) => toast(errorMessage(e, t), 'error');
@@ -831,11 +833,13 @@ function ActionBar({
             className="flex-1"
             loading={fixed.isPending}
             onClick={() =>
-              fixed.mutate(undefined, {
-                onSuccess: (d) =>
-                  toast(d.status === 'solved' ? t('actions.fixedSolved') : t('actions.fixedVoted')),
-                onError,
-              })
+              phone.gate(() =>
+                fixed.mutate(undefined, {
+                  onSuccess: (d) =>
+                    toast(d.status === 'solved' ? t('actions.fixedSolved') : t('actions.fixedVoted')),
+                  onError,
+                }),
+              )
             }
           >
             {t('actions.fixedNow', { votes: p.fixedVotes, quorum: FIXED_QUORUM })}
@@ -853,10 +857,12 @@ function ActionBar({
               className="flex-1 px-3"
               loading={sameHere.isPending}
               onClick={() =>
-                sameHere.mutate(true, {
-                  onSuccess: () => toast(t('actions.sameHereToast')),
-                  onError,
-                })
+                phone.gate(() =>
+                  sameHere.mutate(true, {
+                    onSuccess: () => toast(t('actions.sameHereToast')),
+                    onError,
+                  }),
+                )
               }
             >
               {t('actions.sameHere')}
@@ -865,13 +871,13 @@ function ActionBar({
               size="lg"
               className="flex-1"
               icon={<HandHeart size={19} />}
-              onClick={() => onSheet('offer')}
+              onClick={() => phone.gate(() => onSheet('offer'))}
             >
               {t('actions.canHelp')}
             </Button>
           </>
         ) : (
-          <Button size="lg" block icon={<HandHeart size={20} />} onClick={() => onSheet('offer')}>
+          <Button size="lg" block icon={<HandHeart size={20} />} onClick={() => phone.gate(() => onSheet('offer'))}>
             {t('actions.canHelp')}
           </Button>
         );
@@ -880,6 +886,7 @@ function ActionBar({
   return (
     <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-white/95 px-4 pt-3 pb-[max(14px,env(safe-area-inset-bottom))] backdrop-blur md:left-[248px]">
       <div className="mx-auto flex max-w-2xl items-center gap-2.5">{content}</div>
+      {phone.sheet}
     </div>
   );
 }
