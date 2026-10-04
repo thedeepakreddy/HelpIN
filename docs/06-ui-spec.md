@@ -49,13 +49,13 @@
 │ OfflineBanner (only when offline)          │
 │ RestrictedBanner (only if account limited) │
 ├────────────────────────────────────────────┤
-│  🗺 Problems  🖼 Feed  ⊕ Create  💬 Chat  👤 Profile │  ← BottomTabBar (phones)
+│ 🗺 Problems 👥 Community ⊕ Create 💬 Chat 👤 Profile │  ← BottomTabBar (phones)
 └────────────────────────────────────────────┘
 ```
 
 | Shell element | Contents & behaviour |
 |---|---|
-| **BottomTabBar / Sidebar** | 5 items: **Problems · Feed · ⊕ Create · Chat · Profile**. Chat shows an unread count badge. *Create* is visually emphasised (larger, filled circle). Tapping the current tab scrolls to top / recentres the map. |
+| **BottomTabBar / Sidebar** | 5 items: **Problems · Community · ⊕ Create · Chat · Profile**. Chat shows an unread count badge. *Create* is visually emphasised (larger, filled circle). Tapping the current tab scrolls to top / recentres the map. |
 | **TopBar** | Page title (or the area chip on Problems), **🔔 NotificationBell** with unread count → `/notifications`, **AvatarMenu** (desktop only; on phones Profile is a tab). |
 | **AvatarMenu** | My profile · My activity · Settings · Help & guidelines · Log out |
 | **OfflineBanner** | "You're offline. Showing saved data." Submit buttons are disabled while offline; drafts are kept. |
@@ -80,7 +80,8 @@ flowchart TB
   end
   subgraph App["App (logged in, phone verified)"]
     P[/problems/] --> PD[/p/:id/]
-    F[/feed/] --> FD[/post/:id/]
+    F[/community/] --> FD[/post/:id/]
+    F --> CM[/c/:id/]
     C[/create/] --> CP[/create/problem/]
     C --> CPo[/create/post/]
     CH[/chat/] --> CHD[/chat/:id/]
@@ -124,7 +125,9 @@ flowchart TB
 | `/create` | Fork: Report a problem / Share a post | 2 / 5 |
 | `/create/problem` | Problem wizard (7 steps) | 2 |
 | `/create/post` | Post composer | 5 |
-| `/feed`, `/post/:id` | Social feed; post detail with comments | 5 |
+| `/community` | Community tab: **Feed** and **Communities** (segmented control) | 5 |
+| `/post/:id` | Post detail with comments (photo or thank-you post) | 5 |
+| `/c/:id` | A community: about, Welcome thread, posts, shared problems, members (members only) | 5 |
 | `/chat`, `/chat/:id` | Conversations list; conversation | 3 |
 | `/profile`, `/u/:id` | Own / other user's profile | 1–5 |
 | `/me/activity` | My problems (incl. anonymous) · My help offers | 3 |
@@ -227,7 +230,7 @@ stories double as visual tests.
 | **PostCard** | Author, area, time, photo carousel, caption, ❤️ count, 💬 count, "⋯" | Feed, profile |
 | **CommentItem / CommentComposer** | Flat comments | Post detail |
 | **NotificationItem** | Icon, text, time, unread dot, **inline action buttons** for reminders | Notifications |
-| **ReportSheet** | Reason list (Fake problem, Spam, Harassment, Dangerous, Fraud, False emergency, Inappropriate, Privacy, Other) + details | Everywhere via "⋯" |
+| **ReportSheet** | Reason list (Fake problem, Scam, Paid work / advertising, Spam, Harassment, Dangerous, Fraud, False emergency, Inappropriate, Privacy, Other) + details | Everywhere via "⋯" |
 | **BlockDialog** | Explains the effects (S-03) + confirm | Profiles, chats, cards |
 | **SeriousInterstitial** | Full-screen: "HelpIn is not an emergency service. If anyone is in danger, call 112." [📞 Call 112] [Continue posting] | Wizard |
 | **AnonymousToggle** | "Post anonymously" + explanation of what's hidden and that HelpIn still knows (A-01, A-02) | Wizard review step |
@@ -269,6 +272,10 @@ footer links to legal pages.
 
 ### 6.2 `/login` and `/login/verify` — Log in / sign up
 
+> **Mascot guides:** login and sign-up are guided by illustrated characters (the HelpIn "Hexies")
+> that follow what you type with their eyes, cover their eyes while you type a code, celebrate a
+> successful login, and look sympathetic after a wrong code. See §6.2b.
+
 **`/login`:** SegmentedControl **Phone | Email**, PhoneInput or email Input, CAPTCHA (invisible
 unless suspicious), and a consent line: "By continuing you agree to the Terms and Privacy notice."
 
@@ -288,12 +295,30 @@ unless suspicious), and a consent line: "By continuing you agree to the Terms an
 **States:** wrong code → inline error, 5 tries then a 10-min lock; SMS limit hit → "Too many
 attempts, try again later or use email."
 
+### 6.2b Mascot characters ("Hexies")
+
+Three small hexagon-shaped characters in HelpIn colours (green, tram-yellow, Danube-blue) sit above
+the login form. They make login friendly and memorable, and they mirror the form's state:
+
+| Form state | Characters do | Accessibility |
+|---|---|---|
+| Idle | Blink, look around | Decorative (`aria-hidden`); the form never depends on them |
+| Typing phone/email | Eyes follow the text cursor; lean towards the field | — |
+| Typing the 6-digit code | **Cover their eyes** ("we're not looking") | — |
+| Sending / verifying | Look at the button, small bounce | Button shows its own loading state |
+| **Success** | Jump and cheer, confetti, "Welcome back, {name}!" | Status text announced via live region |
+| **Wrong code** | Sad faces, one pats another, "Oops, that code didn't match. Try again?" | Error text under the field, announced |
+| Too many attempts | Sleepy faces, "Let's take a short break" + countdown | Error text + countdown in text |
+
+Rules: animations respect `prefers-reduced-motion` (faces change, nothing moves); characters never
+cover inputs or errors; all meaning is also in text.
+
 ### 6.3 Onboarding (5 steps, Stepper at top)
 
 | Step | Content | Buttons |
 |---|---|---|
 | **1 `/onboarding/phone`** (skipped if signed up by phone) | "HelpIn needs a verified phone number to keep fake accounts out. It's never shown to anyone." PhoneInput → OtpInput | **Send code** → **Verify** (primary) · Resend code |
-| **2 `/onboarding/profile`** | Display name, optional avatar (PhotoPicker, 1 photo), ☐ "I'm 18 or older" (required), ☐ "I agree to the Community Guidelines" (required, link) | **Continue** (primary; enabled when both boxes are ticked) → `PATCH /me/profile` |
+| **2 `/onboarding/profile`** | Display name, optional avatar (PhotoPicker, 1 photo), **"Languages I speak"** (multi-select chips, at least one; LANG-01), optional "I'm new to Budapest" toggle (shows Newcomer tips and suggests communities), ☐ "I'm 18 or older" (required), ☐ "I agree to the Community Guidelines" (required, link; includes "Help on HelpIn is always free") | **Continue** (primary; enabled when both boxes are ticked) → `PATCH /me/profile` |
 | **3 `/onboarding/area`** | "Where's home? We only store a ~5 km² area, never your address." Map with a res-7 hexagon that follows the centre; LocateMeButton | **Use my location** · **Continue** (primary) → `PUT /me/home-area` · error if outside Budapest: "HelpIn is only in Budapest for now" |
 | **4 `/onboarding/alerts`** | "Which problems should we tell you about?" Radius RadioCards (*My area* / *Nearby, ~2.5 km* (default) / *Wider, ~4 km*), category group chips (all on by default), minimum urgency, max alerts per day (default 5), quiet hours | **Continue** (primary) → `PUT /me/alert-prefs` · **Skip, use defaults** |
 | **5 `/onboarding/notifications`** | PushPermissionCard. **iPhone not installed:** InstallGuide first. **Push blocked/unsupported:** "We'll email you instead." | **Turn on notifications** (primary) → browser prompt → `POST /me/push-subscriptions` · **Use email only** · **Show me how** (iPhone) · then **Start helping** → `/problems` |
@@ -358,9 +383,9 @@ every change (survives closing the tab). **✕ Close** asks "Save draft / Discar
 
 | Step | Content | Buttons & behaviour |
 |---|---|---|
-| **1 · What's it about?** | CategoryPicker: 6 group tiles (People, Environment, Roads & public spaces, Utilities, Safety, Other) → category list | Tapping a category = **Next**. Sets default kind & urgency. |
+| **1 · What's it about?** | CategoryPicker: 7 group tiles (Everyday help, Newcomers & language, Environment, Roads & public spaces, Utilities, Safety, Other) → category list | Tapping a category = **Next**. Sets default kind & urgency. |
 | **2 · Is it one of these?** | SimilarIncidentsList: open incidents of the same category in this and neighbouring areas, each with title, distance, affected count, photo (R-31). Skipped automatically if none. | **Same here** on an incident → `POST /incidents/{id}/affected` → success screen "You're now following this. 24 neighbours affected" → `/p/:id`. **No, mine is different** (primary) → Next. |
-| **3 · Describe it** | Title (3–80), description (≤ 1000), **Kind** RadioCards: *Personal: I need help* / *Community: affects many people* (pre-selected from category) | **Next** (enabled when title is valid) |
+| **3 · Describe it** | Title (3–80), description (≤ 1000), **Kind** RadioCards: *Personal: I need help* / *Community: affects many people* (pre-selected from category), optional **"Help needed in language"** (e.g. Hungarian → English; required for Language & translation help, LANG-02), optional **"Also share with a community"** (communities I'm in, COM-04). Paperwork categories show the "cover personal details" and "offices never ask for payment through private people" tips (CAT-07, CAT-08). | **Next** (enabled when title is valid) |
 | **4 · Where?** | MapView centred on the user (or home area), draggable centre; AreaPrecisionPicker with live hexagon; text: "Others will see this area, not the exact spot." Optional ☐ "Save the exact spot privately so I can share it with a helper later" | **Use my location** · **Next**. Error "Outside Budapest" blocks Next. |
 | **5 · Photos** (optional) | PhotoPicker, up to 6 photos. Tip: "Don't show faces or house numbers." Uploads start immediately (`POST /media/upload-url` → upload → `finalize`) | **Skip** · **Next** (waits for uploads; failed ones show Retry) |
 | **6 · How urgent?** | RadioCards: Basic / Medium / Serious with one-line explanations | Selecting **Serious** opens **SeriousInterstitial** ([📞 Call 112] · [It's not an emergency, continue]). **Next** |
@@ -417,7 +442,7 @@ OnNoticeBanner · outside launch area → block at step 4 · validation errors h
 | **Same here** | Adds you as affected; button turns into "You're affected · Undo" and the count increases (optimistic) | `POST /incidents/{id}/affected` (Undo: `DELETE`) | R-30 |
 | **Fixed now** | Confirm dialog "Is it fixed where you are?" → your vote counts towards the 3-vote quorum ("2 of 3 neighbours say it's fixed") | `POST /incidents/{id}/fixed` | R-21 |
 | **Post update** | Opens **UpdateComposer** sheet: progress status chips (Still need help, Making progress, Partly solved, Need has changed, Note), text (required for "Need has changed"/"Note"), up to 3 photos, [Post update]. Helpers and affected neighbours see a reduced status set. | `POST /problems/{id}/updates` | R-40…R-46; counts as a raiser response (R-53) |
-| **Confirm solved** | Opens **ConfirmSolvedSheet**: list of helpers who offered (checkbox, max 3, pre-ticked: accepted helpers) + option "Nobody, I solved it myself" + note "Each helper you credit gets +10 karma; you get +2". [Confirm solved] → success: confetti, "Solved! 🎉" | `POST /problems/{id}/confirm-solved` | R-15, K-01…K-11 |
+| **Confirm solved** | Opens **ConfirmSolvedSheet**: list of helpers who offered (checkbox, max 3, pre-ticked: accepted helpers) + option "Nobody, I solved it myself" + note "Each helper you credit gets +10 karma; you get +2". [Confirm solved] → success: confetti, "Solved! 🎉" After success, offers **"Say thanks publicly"** → ThankYouComposer (pre-filled text, optional photo; credited helpers are tagged once they approve, F-06). | `POST /problems/{id}/confirm-solved` | R-15, K-01…K-11 |
 | **Still need help** | One tap, no dialog → toast "Got it, helpers know you still need help." Resets the clock | `POST /problems/{id}/still-need-help` | R-53 |
 | **Accept** (OfferCard) | Accepts the helper, opens the chat with their offer message as the first message, toast with [Open chat] | `POST /offers/{id}/accept` | R-13 |
 | **Decline** (OfferCard) | Confirm "Decline Bence's offer? They won't be able to offer again." | `POST /offers/{id}/decline` | R-11 |
@@ -437,10 +462,14 @@ OnNoticeBanner · outside launch area → block at step 4 · validation errors h
 | Abandoned | "Closed: no activity for 2 days" | — |
 | Removed | Page shows "This problem was removed for breaking the community guidelines." (no content) | — |
 
-### 6.8 `/feed` and `/post/:id` — Social feed
+### 6.8 `/community` and `/post/:id` — Community tab: feed
 
-**`/feed`:** "Share a post" bar at the top (avatar + "What's happening in your neighbourhood?"),
-then PostCards, newest first, infinite scroll. Local area + neighbouring areas (F-02).
+**`/community`** has a SegmentedControl **Feed | Communities**.
+
+**Feed:** "Share a post" bar at the top (avatar + "What's happening in your neighbourhood?"),
+then PostCards and **ThankYouCards** ("Arjun thanked Zsófi for helping with a letter from the
+district office"), plus posts from the user's communities, newest first, infinite scroll. Local
+area + neighbouring areas (F-02).
 
 | Button | Shown when | Does | API |
 |---|---|---|---|
@@ -459,6 +488,31 @@ then PostCards, newest first, infinite scroll. Local area + neighbouring areas (
 | **⋯ on comment → Report / Delete (own)** | — | `POST /reports` / `DELETE /comments/{id}` |
 
 Empty feed: "No posts in your area yet. Be the first to share something." [Share a post]
+
+### 6.8b `/community` (Communities) and `/c/:id` — Communities
+
+**Communities view:** "Your communities" (cards with cover, name, type chip, new-post dot), then
+"Suggested for you" (district community of your home area first, then by languages you speak),
+and a "Can't find yours? Request a community" link (the admin creates communities during the
+beta, COM-02).
+
+| Button | Shown when | Does | API |
+|---|---|---|---|
+| **Join** | Not a member | Joins; toast "You joined. Say hi in the Welcome thread!" | `POST /communities/{id}/members` |
+| **Open** (card tap) | Always | → `/c/:id` | — |
+| **Request a community** | Always | Short form (name, type, why) sent to the admin | `POST /community-requests` |
+
+**`/c/:id` community page:** cover, name, type, description, rules, member count (members list
+visible to members only, COM-06), tabs **Posts | Problems | Welcome**.
+
+| Button | Shown when | Does | API |
+|---|---|---|---|
+| **Join / Leave** | Always | Membership toggle (leave asks to confirm) | `POST/DELETE /communities/{id}/members` |
+| **Say hello** | Member, Welcome tab | Posts an introduction in the Welcome thread | `POST /communities/{id}/welcome` |
+| **Share a post here** | Member | → `/create/post?community=id` | — |
+| **Ask this community for help** | Member | → problem wizard with "Also share with this community" pre-set | — |
+| **Alerts for this community** | Member | Toggle: notify me of problems shared here | `PUT /communities/{id}/alerts` |
+| **⋯ → Report community** | Always | ReportSheet | `POST /reports` |
 
 ### 6.9 `/create/post` — Post composer
 
@@ -507,6 +561,10 @@ offer, or you accept someone's. [Find someone to help]" → `/problems`.
 | **⋯ → Report** · **Block** | Always | ReportSheet / BlockDialog (blocking makes the chat read-only, C-04) | `POST /reports` / `POST /blocks` |
 | **Long-press message → Report message** | Others' messages | ReportSheet for that message | `POST /reports` |
 
+**Safety notice:** the first message area of every new chat shows "Never send money or ID
+documents to someone you met on HelpIn. Help here is always free." (CAT-07). The Report sheet
+includes **Scam** and **Paid work / advertising** reasons.
+
 **Read-only state:** banner "This chat closed 48 h after the problem ended" (C-03) or "You
 blocked this user". The composer is hidden.
 
@@ -527,6 +585,8 @@ blocked this user". The composer is hidden.
 └────────────────────────────────────┘
 ```
 
+The header shows **languages spoken** as chips (LANG-01) and a "New to Budapest" badge if the user
+chose it. Community memberships are hidden unless the user chooses to show them (COM-06).
 Home area is never shown on profiles (L-05). Anonymous problems never appear here (A-04).
 
 | Tab | Content | Item tap |

@@ -34,7 +34,7 @@ packages), microservices, multi-region, custom ML infrastructure.
 ```mermaid
 flowchart TB
   subgraph Client["🌐 Web app (React + Vite PWA, TypeScript)"]
-    UI[Pages: Problems · Feed · Create · Chat · Profile]
+    UI[Pages: Problems · Community · Create · Chat · Profile]
     RQ[TanStack Query cache]
     H3c[h3-js: viewport → cells]
     SW[Service worker<br/>offline shell · Web Push]
@@ -433,7 +433,8 @@ deep-links to a normal URL (`/p/{id}`, `/chat/{id}`), and that URL shows the sam
 | Help | `POST /problems/{id}/offers` · `GET /problems/{id}/offers` (asker) · `POST /offers/{id}/accept` · `…/decline` · `…/withdraw` · `…/claim-solved` · `GET /me/offers` |
 | Chat | `GET /conversations` · `GET /conversations/{id}/messages?before|after` · `POST /conversations/{id}/messages` · `POST /conversations/{id}/read` · `POST /conversations/{id}/share-location` · `POST /conversations/{id}/reveal-identity` (anonymous askers, A-03) |
 | Media | `POST /media/upload-url` · `POST /media/{id}/finalize` · `GET /media/{id}` |
-| Feed | `GET /feed` · `POST /posts` · `DELETE /posts/{id}` · `GET/POST /posts/{id}/comments` · `DELETE /comments/{id}` · `PUT/DELETE /posts/{id}/reaction` |
+| Feed | `GET /feed` · `POST /posts` (`kind`: photo · thank_you · welcome; optional `communityId`) · `POST /posts/{id}/tags/{userId}/approve|decline` (thank-you tags, F-06) · `DELETE /posts/{id}` · `GET/POST /posts/{id}/comments` · `DELETE /comments/{id}` · `PUT/DELETE /posts/{id}/reaction` |
+| Communities | `GET /communities` (mine + suggested) · `GET /communities/{id}` · `POST/DELETE /communities/{id}/members` · `PUT /communities/{id}/alerts` · `GET /communities/{id}/posts|problems|welcome` · `POST /communities/{id}/welcome` · `POST /community-requests` · admin: `POST /admin/communities` |
 | Safety | `POST /reports` · `POST /blocks` · `DELETE /blocks/{userId}` · `GET /me/blocks` · `POST /appeals` (DSA) |
 | Notifications | `GET /me/notifications` · `POST /me/notifications/read` |
 | Meta | `GET /meta/config` (categories, urgency labels, limits, launch areas; versioned and cached) |
@@ -447,7 +448,8 @@ These live in `packages/config` and are served by `GET /meta/config`, so changin
 need a deploy of the client:
 
 - **Categories:** `{ id, group, label_key, icon, default_kind, default_urgency, allowed_urgencies }`.
-  Groups: People · Environment · Roads & public spaces · Utilities · Safety · Other
+  Groups: Everyday help · Newcomers & language · Environment · Roads & public spaces · Utilities ·
+  Safety · Other
   (full catalogue: Domain Model §11).
 - **Urgency:** labels, icons, colours.
 - **Response rule:** response window (48 h), reminder points (24 h, 44 h), which kinds it applies
@@ -471,7 +473,7 @@ need a deploy of the client:
 | Framework | **React + TypeScript + Vite**, a single-page app. Everything is behind login, so there's no need for server rendering. |
 | PWA | `vite-plugin-pwa` (Workbox): installable to the Home Screen, offline app shell, cached recent data, Web Push via the service worker |
 | Routing | TanStack Router (type-safe URLs; every screen has a shareable URL) |
-| Layout | Mobile-first. **Bottom tab bar on phones**, left sidebar on tablets/desktop: **Problems · Feed · ⊕ Create · Chat · Profile** |
+| Layout | Mobile-first. **Bottom tab bar on phones**, left sidebar on tablets/desktop: **Problems · Community · ⊕ Create · Chat · Profile** |
 | Server state | TanStack Query (hooks from `packages/api-client`), persisted to IndexedDB for fast reloads |
 | UI | Tailwind CSS + Radix UI primitives (accessible dialogs, menus, tabs) |
 | Forms | react-hook-form + zod schemas from `packages/contracts` |
@@ -627,6 +629,7 @@ The MVP design comfortably handles a whole city like Budapest (~100k users, ≈ 
 |---|---|---|
 | **Native iOS / Android apps** | New client using the same `/v1` API and shared packages; native push added in `platform/push.ts` | API-first design; logic lives in packages, not screens |
 | **Hungarian language** | Add a translation file | All strings are i18n keys from day one |
+| **Machine translation** (LANG-05) | A `translation` module calling an EU-hosted translation API, results cached per text + language pair; "Translate" buttons on problems, updates, posts and chat | Text is already stored with its language; the UI shows original + translation |
 | **AI duplicate detection / incident clustering** | New `ai` module consuming `ProblemCreated`: embed title+description (pgvector), compare against open incidents in `gridDisk(cell_r8, 1)` + same category, then suggest or auto-merge via R-34 | Incidents already exist and every "same here" tap is labelled training data |
 | **AI category suggestion / fake-problem detection** | `POST /problems/suggest-category`; text `Scanner` interface | Category is config-driven; the scanner hook already exists |
 | **Advanced reputation / badges / levels** | New consumers of the karma ledger | The ledger holds full, immutable history |

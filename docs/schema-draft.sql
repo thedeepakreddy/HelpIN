@@ -39,7 +39,8 @@ CREATE TABLE app.media (
   id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_id       uuid NOT NULL REFERENCES app.users(id),
   purpose        text NOT NULL
-                   CHECK (purpose IN ('problem_photo', 'post_photo', 'avatar', 'chat_image')),
+                   CHECK (purpose IN ('problem_photo', 'post_photo', 'avatar', 'chat_image',
+                                      'community_cover')),
   status         text NOT NULL DEFAULT 'pending'
                    CHECK (status IN ('pending', 'processing', 'ready', 'rejected', 'deleted')),
   content_type   text NOT NULL,
@@ -59,6 +60,8 @@ CREATE TABLE app.profiles (
   bio               text CHECK (char_length(bio) <= 300),
   avatar_media_id   uuid REFERENCES app.media(id),
   home_cell_r7      app.h3_cell,                       -- L-05: res-7 cell only, never a point
+  languages         text[] NOT NULL DEFAULT '{}',       -- LANG-01: e.g. {hu,en,uk}
+  is_newcomer       boolean NOT NULL DEFAULT false,     -- "New to Budapest" badge (optional)
   karma_balance     integer NOT NULL DEFAULT 0,        -- cache of karma_entries (K-08)
   neighbours_helped integer NOT NULL DEFAULT 0,        -- cache (K-09)
   updated_at        timestamptz NOT NULL DEFAULT now()
@@ -169,6 +172,7 @@ CREATE TABLE app.problems (
   category        text NOT NULL,
   kind            text NOT NULL CHECK (kind IN ('request', 'issue')),
   is_anonymous    boolean NOT NULL DEFAULT false,         -- A-01: hidden publicly, known to HelpIn
+  language_needed text,                                   -- LANG-02: e.g. 'hu>en'
   title           text NOT NULL CHECK (char_length(title) BETWEEN 3 AND 80),
   description     text NOT NULL DEFAULT '' CHECK (char_length(description) <= 1000),
   urgency         text NOT NULL CHECK (urgency IN ('basic', 'medium', 'serious')),
@@ -376,16 +380,79 @@ CREATE INDEX messages_conversation_idx ON app.messages (conversation_id, id DESC
 CREATE INDEX messages_purge_idx ON app.messages (purge_after) WHERE purge_after IS NOT NULL;
 
 -- -----------------------------------------------------------------------------
+-- Communities (§14)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE app.communities (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug           text NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9-]{3,60}$'),
+  name           text NOT NULL CHECK (char_length(name) BETWEEN 3 AND 80),
+  type           text NOT NULL CHECK (type IN ('district', 'language_culture', 'students',
+                                               'civic_environment', 'interest')),
+  description    text CHECK (char_length(description) <= 1000),
+  rules          text CHECK (char_length(rules) <= 2000),
+  cover_media_id uuid REFERENCES app.media(id),
+  created_by     uuid NOT NULL REFERENCES app.users(id),  -- COM-02: admin during beta
+  status         text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'archived', 'removed')),
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE app.community_members (
+  community_id    uuid NOT NULL REFERENCES app.communities(id),
+  user_id         uuid NOT NULL REFERENCES app.users(id),
+  role            text NOT NULL DEFAULT 'member' CHECK (role IN ('member', 'moderator')),
+  show_on_profile boolean NOT NULL DEFAULT false,         -- COM-06: private by default
+  alerts          boolean NOT NULL DEFAULT false,         -- COM-03
+  joined_at       timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (community_id, user_id)
+);
+CREATE INDEX community_members_user_idx ON app.community_members (user_id);
+
+CREATE TABLE app.community_problem_shares (                -- COM-04
+  community_id uuid NOT NULL REFERENCES app.communities(id),
+  problem_id   uuid NOT NULL REFERENCES app.problems(id),
+  shared_by    uuid NOT NULL REFERENCES app.users(id),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (community_id, problem_id)
+);
+
+CREATE TABLE app.community_requests (                      -- "Request a community"
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  requester_id uuid NOT NULL REFERENCES app.users(id),
+  name         text NOT NULL CHECK (char_length(name) BETWEEN 3 AND 80),
+  type         text NOT NULL,
+  reason       text CHECK (char_length(reason) <= 1000),
+  status       text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'created', 'declined')),
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+-- -----------------------------------------------------------------------------
 -- Social feed (separate from problems, F-03)
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE app.posts (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  author_id  uuid NOT NULL REFERENCES app.users(id),
-  caption    text CHECK (char_length(caption) <= 500),
-  cell_r7    app.h3_cell NOT NULL,                       -- F-01
-  status     text NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'hidden', 'removed')),
-  created_at timestamptz NOT NULL DEFAULT now()
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  author_id    uuid NOT NULL REFERENCES app.users(id),
+  kind         text NOT NULL DEFAULT 'photo'
+                 CHECK (kind IN ('photo', 'thank_you', 'welcome')),  -- F-01, F-06, COM-05
+  caption      text CHECK (char_length(caption) <= 500),
+  cell_r7      app.h3_cell NOT NULL,                     -- F-01
+  community_id uuid REFERENCES app.communities(id),      -- optional: shared to one community
+  problem_id   uuid REFERENCES app.problems(id),         -- thank-you posts link the solved problem
+  status       text NOT NULL DEFAULT 'visible' CHECK (status IN ('visible', 'hidden', 'removed')),
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  CHECK ((kind = 'thank_you') = (problem_id IS NOT NULL)),
+  CHECK (kind <> 'welcome' OR community_id IS NOT NULL)
+);
+CREATE INDEX posts_community_idx ON app.posts (community_id, created_at DESC)
+  WHERE community_id IS NOT NULL AND status = 'visible';
+
+CREATE TABLE app.post_tags (                               -- F-06: helpers approve their tag
+  post_id    uuid NOT NULL REFERENCES app.posts(id),
+  user_id    uuid NOT NULL REFERENCES app.users(id),
+  status     text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (post_id, user_id)
 );
 CREATE INDEX posts_feed_idx ON app.posts (cell_r7, created_at DESC) WHERE status = 'visible';
 CREATE INDEX posts_author_idx ON app.posts (author_id, created_at DESC);
@@ -423,10 +490,10 @@ CREATE TABLE app.reports (                                 -- S-04
   reporter_id uuid NOT NULL REFERENCES app.users(id),
   target_type text NOT NULL CHECK (target_type IN (
                 'problem', 'problem_update', 'help_offer', 'message',
-                'post', 'comment', 'user')),
+                'post', 'comment', 'user', 'community')),
   target_id   text NOT NULL,
   reason      text NOT NULL CHECK (reason IN (
-                'fake_problem', 'spam', 'harassment', 'dangerous', 'fraud', 'false_emergency',
+                'fake_problem', 'scam', 'paid_work', 'spam', 'harassment', 'dangerous', 'fraud', 'false_emergency',
                 'inappropriate', 'privacy', 'other')),
   details     text CHECK (char_length(details) <= 1000),
   status      text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'actioned', 'dismissed')),

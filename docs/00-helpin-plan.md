@@ -30,9 +30,20 @@
 |---|---|---|
 | **Progress updates** | The asker posts updates on the problem's tab (status + text + photos) so helpers know exactly what's still needed. The latest update is pinned. | §5, [02 §4.6](02-domain-model.md#46-progress-updates-the-problem-tabs-timeline) |
 | **Respond or lose karma** | Once people start helping a **personal** problem, the raiser must respond within **2 days** or **gets negative karma points**. If nobody (raiser or helpers) updates it for 2 days, the tab is **automatically removed**. Helpers' updates keep it alive. **Community problems never get penalties.** | §5, [02 §4.7](02-domain-model.md#47-raiser-response-rule-accountability) |
-| **Any problem can be posted** | People problems, environment (dirty areas, local rivers, lakes, ponds, parks, trees, pollution), roads and public spaces, utilities, safety, and anything else. | §2, [02 §11](02-domain-model.md#11-category-catalogue-any-problem-can-be-posted) |
+| **Any problem can be posted** | Everyday help, newcomers & language help, environment (dirty areas, local rivers, lakes, ponds, parks, trees, pollution), roads and public spaces, utilities, safety, and anything else. | §2, [02 §11](02-domain-model.md#11-category-catalogue-any-problem-can-be-posted) |
 | **Anonymous posting** | Problems can be posted anonymously ("Anonymous neighbour"). HelpIn still knows who posted, so the community guidelines apply. **Fake problems cost −20 karma** and the right to post anonymously. | §11, [02 §12](02-domain-model.md#12-anonymous-posting-accountable-anonymity) |
 | **Askers earn a little karma** | **+2** for closing a solved problem (helpers still get +10). | §7 |
+
+### New in v2.1: a social platform for mutual help
+
+| Addition | Summary | Where |
+|---|---|---|
+| **Positioning** | A social platform for mutual help between locals, newcomers and communities, **not** a gig marketplace. Help is always free. | §1, [01 §0](01-product-theory.md#0-what-helpin-is-and-what-it-isnt) |
+| **Newcomers & language** category group | Language & translation help, paperwork & official offices, finding services, settling in | §2 |
+| **Languages** | Profiles show languages spoken; problems say which language help is needed; "Speaks your language" badges; translation later | §10b, [02 §13](02-domain-model.md#13-languages-bridging-newcomers-and-locals) |
+| **Communities** | District, language & culture, student and civic communities with their own feed, welcome thread and shared problems. Membership private by default. | §10b, [02 §14](02-domain-model.md#14-communities) |
+| **Thank-you posts** | After a solve, the asker can thank helpers publicly in the feed (helpers approve the tag) | §10 |
+| **Scam protection** | No selling/renting/paid services; "never send money" warning in chats; "Scam" report reason | §11 |
 
 ### Founder decisions
 
@@ -53,9 +64,19 @@
 
 ## 1. Core idea
 
-A hyperlocal app where people post **any real-world local problem** in an approximate area,
-nearby users offer help, the asker keeps the problem updated, and when it's solved the asker
-confirms it. The problem closes automatically and successful helpers earn karma.
+**HelpIn is a social platform where people help one another**: locals, newcomers and immigrants,
+and the communities they form in Budapest. People post **any real-world local problem** in an
+approximate area, neighbours offer help **for free**, the asker keeps the problem updated, and
+when it's solved the asker confirms it. The problem closes automatically and helpers earn karma.
+
+**It is not a gig or task marketplace.** There are no prices, paid tasks, jobs, selling or
+renting. Help is mutual, and it flows both ways between locals and newcomers.
+
+| Who | Gets help with | Gives |
+|---|---|---|
+| **Newcomers & immigrants** | Language, Hungarian paperwork and offices, finding a doctor or school, settling in, everyday problems | Their skills and languages, everyday help, energy for community projects |
+| **Locals** | Everyday problems, a stronger neighbourhood, fixing shared issues | Language, local know-how, a welcome |
+| **Communities** | Organising, welcoming members, fixing shared problems together | Members who show up, local trust |
 
 **Core loop:** see a nearby problem → I can help → talk → solve → asker confirms → helper earns
 reputation.
@@ -72,7 +93,8 @@ Anything local that needs solving:
 
 | Group | Examples | Default kind |
 |---|---|---|
-| 🙋 People | Need a hand, lost & found, borrow/lend, elderly support, pets & animals, vehicle help, advice | Request |
+| 🤝 Everyday help | Need a hand, lost & found, borrow/lend, elderly support, pets & animals, vehicle help, advice | Request |
+| 🌍 Newcomers & language | Language & translation help, paperwork & official offices, finding a doctor/school/service, settling in & city know-how | Request |
 | 🌳 Environment | Dirty areas & garbage, **local rivers, lakes & ponds**, **parks**, trees, smoke/noise, water wastage | Issue |
 | 🛣️ Roads & public spaces | Potholes, streetlights, drainage, footpaths, traffic | Issue |
 | 💧 Utilities | Water supply, power cuts, gas, network | Issue |
@@ -91,7 +113,7 @@ Anything local that needs solving:
 ## 3. App structure
 
 HelpIn is a **web app** that works in any phone or desktop browser and can be **installed to the
-Home Screen** like an app. On phones: bottom navigation **Problems | Feed | ⊕ Create | Chat |
+Home Screen** like an app. On phones: bottom navigation **Problems | Community | ⊕ Create | Chat |
 Profile**; on desktop the same items sit in a sidebar. It always opens on Problems.
 
 ### Problems (map)
@@ -118,9 +140,11 @@ Karma (can be negative), **neighbours helped**, **reliability** ("Responds to he
 and three separate tabs: **Posts** (feed photos) · **Problem photos** (report + update photos) ·
 **Solved history**. Anonymous problems never appear on a public profile.
 
-### Feed
-A local, chronological photo feed (captions, ❤️, comments). It's secondary to problems and can be
-switched off per area. It's included in the first beta.
+### Community (feed + communities)
+The **Feed**: a local, chronological feed of photo posts, thank-you posts celebrating helpers, and
+posts from your communities. **Communities**: join district, language & culture, student or civic
+communities, each with a Welcome thread and shared problems. Helping stays at the centre; the
+social layer builds trust between locals and newcomers. Included in the first beta.
 → [03 §12 Web app](03-architecture.md#12-web-app-architecture) · full page & button spec: [06 — Pages, Components & Buttons](06-ui-spec.md)
 
 ---
@@ -258,12 +282,27 @@ Both go through the same pipeline, which strips GPS/EXIF and resizes.
 
 ---
 
-## 10. Social feed
+## 10. The social layer: feed, thank-yous and communities
 
-Local (your area + neighbours), chronological, photos + captions + ❤️ + comments. Guardrails:
+The **Community** tab holds the feed and communities. The feed is local (your area +
+neighbours) and chronological: photos + captions + ❤️ + comments, **thank-you posts** that
+celebrate helpers, and posts from your communities. Guardrails:
 Problems is always the default tab; posts never appear on the map; there's a per-area on/off
 switch; and we track the share of users who still engage with problems. It's built after the core
 loop and **included in the first beta**.
+
+---
+
+## 10b. Languages & communities
+
+- **Languages:** every profile lists the languages its owner speaks. Problems can say which
+  language help is needed ("Hungarian → English"), and cards show "Speaks your language". People
+  can get alerts for problems needing a language they speak. One-tap translation comes after
+  launch.
+- **Communities:** district neighbours, language & culture communities, student groups, civic
+  groups. Each has a feed, a pinned **Welcome thread** for newcomers, and problems shared to it.
+  Communities are created by the admin during the beta. **Membership is private by default**,
+  because belonging to a language, culture or religion-based community is sensitive personal data.
 
 ---
 
@@ -280,6 +319,9 @@ loop and **included in the first beta**.
 - **Anonymous posting:** hidden from the public, never on the asker's profile, but always known
   to HelpIn. Moderators can see who posted only while handling a report, and every lookup is logged.
 - **Phone verification for everyone:** one account per phone number, which stops fake accounts.
+- **Help is free:** no paid work, jobs, prices, selling, renting or advertising (reportable).
+- **Scam protection for newcomers:** chats warn "Never send money or ID documents to someone you
+  met on HelpIn"; paperwork problems remind people to cover personal details in photos.
 - 18+ only; community guidelines (no fake problems, illegal content, ads, or accusations against
   private people).
 - **EU law:** GDPR (data stored in the EU, in-app data export and account deletion, privacy
@@ -337,7 +379,7 @@ share, notification opt-outs.
 | 2 | Problems on the map: all categories, create flow (incl. **anonymous**), photos (EXIF stripped), hexagon map, problem tab, **progress updates**, Same here, report |
 | 3 | **Help loop:** I can help, accept, chat, claim solved, confirm + credit, karma (+10 / +2), history, notifications |
 | 4 | Liquidity & accountability: nearby alerts, **2-day response rule + penalty** (personal problems), issue quorum |
-| 5 | Social feed and the separated profile tabs |
+| 5 | Community tab: feed, thank-you posts, communities, languages on profiles, separated profile tabs |
 | 6 | Safety, ops & EU readiness: admin console, fake-problem handling, DSA reasons & appeals, GDPR documents, metrics, load test, legal review |
 | 7 | Closed beta (seed hubs) → open across all of Budapest |
 | 8 | Native mobile apps (to be planned) |
@@ -374,6 +416,9 @@ A user can:
 21. Post a problem anonymously
 22. Use HelpIn in any phone or desktop browser, install it to the Home Screen, and get push or
     email notifications
+23. Show the languages they speak, and ask for help in a specific language
+24. Join communities and share a problem with a community
+25. Thank helpers publicly with a thank-you post (helpers approve the tag)
 
 ---
 

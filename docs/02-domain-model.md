@@ -405,11 +405,12 @@ Warrior"), solver levels, streaks, and decay of inactive reputation.
 
 | Rule | |
 |---|---|
-| **F-01** | Posts have 1–10 photos and an optional caption. A post is tagged with the author's **res-7 area** at posting time. |
+| **F-01** | Photo posts have 1–10 photos and an optional caption. A post is tagged with the author's **res-7 area** at posting time, and optionally shared to one community the author belongs to (§14). |
 | **F-02** | The feed shows posts from the viewer's area and ring-1 neighbours, newest first. No ranking algorithm in MVP. |
 | **F-03** | Posts never appear on the map, and problems never appear in the feed. Media used by a post can't be attached to a problem, and vice versa. |
 | **F-04** | Profile has two separate tabs: **Posts** (from `post_media`) and **Problem photos** (from `problem_photos` of problems the user asked, excluding `removed`). |
 | **F-05** | One reaction type ("❤️") in MVP. Comments are flat (no threads). |
+| **F-06** | **Thank-you posts:** after confirming solved, the asker is invited to "Say thanks publicly". This creates a text post (photo optional) that links to the solved problem and **tags the credited helpers**. Each tagged helper must **approve** the tag before their name appears. Anonymous askers post thank-yous as "Anonymous neighbour". |
 
 ---
 
@@ -488,7 +489,8 @@ category. Each category sets a default kind and urgency, and the user can change
 
 | Group | Categories | Default kind | Examples |
 |---|---|---|---|
-| 🙋 **People** | Need a hand · Lost & found · Borrow / lend · Elderly & neighbour support · Pets & animals · Vehicle help · Advice & recommendations | request | Moving a sofa, lost keys, need a ladder, check on an elderly neighbour, stray dog injured, car won't start |
+| 🤝 **Everyday help** | Need a hand · Lost & found · Borrow / lend · Elderly & neighbour support · Pets & animals · Vehicle help · Advice & recommendations | request | Lost keys, borrow a drill, check on an elderly neighbour, stray dog injured, car won't start, "which pharmacy is open on Sunday?" |
+| 🌍 **Newcomers & language** | Language & translation help · Paperwork & official offices · Finding a doctor, school or service · Settling in & city know-how | request | "Can someone help me understand this letter from the district office?", "What do I bring to the Kormányablak for my address card?", "Looking for an English-speaking GP in District XI", "How do I get a BKK pass?" |
 | 🌳 **Environment** | Garbage & dirty areas · Rivers, lakes & ponds · Parks & green spaces · Trees & plants · Air, smoke & noise · Water wastage | issue | Garbage dumped on an empty plot, polluted pond, broken park benches, fallen tree, burning waste, leaking pipe |
 | 🛣️ **Roads & public spaces** | Roads & potholes · Streetlights · Drainage & sewage · Footpaths & public spaces · Traffic & parking | issue | Pothole, dark street, overflowing drain, blocked footpath |
 | 💧 **Utilities** | Water supply · Power cuts · Gas · Internet / phone network | issue | No water since morning, area power cut |
@@ -504,6 +506,9 @@ Rules:
 | **CAT-03** | **Personal support** shows helpline numbers (e.g. the EU emotional-support line **116 123**; verify the Hungarian numbers before launch) and a reminder not to share private details publicly. HelpIn connects neighbours; it doesn't replace professional, medical or emergency help. |
 | **CAT-04** | **Not allowed in any category** (community guidelines): anything illegal, selling or advertising, political campaigning, accusations naming a private person, medical diagnosis requests, and **fake problems** (A-06). These are reportable and removed by moderation. |
 | **CAT-05** | Every "Same here" and every category correction a user makes is kept as labelled data for future AI category suggestion and duplicate detection. |
+| **CAT-06** | **Help is free, never a gig.** HelpIn is mutual help, not a marketplace. Not allowed: offering or requesting **paid** work, job offers, prices or "I'll pay €X", selling, renting or advertising services. There are no price fields anywhere. Such posts are reportable ("Paid work / advertising") and removed. Small thank-you gestures (coffee, snacks) are fine. |
+| **CAT-07** | **Scam protection for newcomers:** the first time someone opens a chat, it shows "Never send money or ID documents to someone you met on HelpIn." Report reasons include **"Scam"**. Problems in *Paperwork & official offices* show a tip: "Official offices never ask for payment through private people." |
+| **CAT-08** | **Personal documents:** when posting photos in *Paperwork & official offices*, the app reminds the asker to cover names, ID numbers and addresses before uploading. |
 
 ---
 
@@ -523,3 +528,32 @@ knows who posted, so every rule still applies and fake problems can be punished.
 | **A-06** | **No fake problems.** Posting a problem that isn't real (made up, a prank, posted to farm karma, or to mislead neighbours) breaks the community guidelines, whether anonymous or not. Users report it with the reason **"Fake problem"**. If a moderator upholds it: the problem is removed, the asker gets a statement of reasons (S-09) and the fake-problem penalty (K-16). |
 | **A-07** | Moderators can see the real author of an anonymous problem **only while handling a report about it**. Every such lookup is recorded in `moderation_actions` with a reason (S-06). |
 | **A-08** | The location rules don't change: anonymous problems use the same hexagon area (L-01…L-10), and photos are EXIF-stripped (L-08). Location is often what identifies a person, so the "wider area" option is suggested when posting anonymously. |
+
+---
+
+## 13. Languages (bridging newcomers and locals)
+
+| Rule | |
+|---|---|
+| **LANG-01** | Every profile lists the **languages the person speaks** (e.g. Hungarian, English, Ukrainian, Hindi, Arabic), chosen in onboarding. Shown on the profile and on offer cards. |
+| **LANG-02** | A problem can say **which language help is needed in** ("Hungarian → English"). The card shows it, and it's required for *Language & translation help*. |
+| **LANG-03** | Users can opt in to alerts for problems needing a language they speak, even outside their usual categories ("Tell me when someone needs Hungarian help"). |
+| **LANG-04** | Cards and offers show **"Speaks your language"** when the asker and helper share a language. |
+| **LANG-05** (later) | **One-tap translation** of problems, updates, posts and chat messages, using an EU-hosted translation service. It's always shown as "Translated from Hungarian", with the original one tap away. |
+
+---
+
+## 14. Communities
+
+Communities give the social layer its structure: neighbours of a district, people who share a
+language or culture, student groups, and civic groups.
+
+| Rule | |
+|---|---|
+| **COM-01** | A **community** has a name, description, cover image, type (*District* · *Language & culture* · *Students* · *Civic & environment* · *Interest*), and rules. |
+| **COM-02** | During the beta, communities are **created by the admin** on request, to avoid spam and duplicates. Later, trusted users can create them. |
+| **COM-03** | Anyone can **join or leave** a public community. Members see its posts in their feed and can opt in to its alerts. |
+| **COM-04** | Members can **share a problem to a community** (e.g. a language-help request to "Hungarian language exchange"). The problem stays on the map as normal; the community gets a card linking to it. |
+| **COM-05** | Each community has a pinned **Welcome thread** where new members introduce themselves, so newcomers have an obvious first step. |
+| **COM-06** | **Membership is private by default.** Joining a language, culture or religion-based community can reveal sensitive personal data (GDPR special categories). Profiles never list communities unless the member chooses to show them. Member lists are visible only to members. |
+| **COM-07** | Communities follow the same reporting, blocking and moderation rules. Community moderators (volunteers) come later; the admin moderates during the beta. |

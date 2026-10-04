@@ -139,7 +139,7 @@
 
 ### ADR-015 · Open category catalogue in groups
 - **Status:** Accepted (founder request)
-- **Decision:** people can post any local problem. Categories are grouped (People · Environment ·
+- **Decision:** people can post any local problem. Categories are grouped (Everyday help · Newcomers & language · Environment ·
   Roads & public spaces · Utilities · Safety · Other), config-driven, and each sets a default kind
   and urgency.
 - **Why:** HelpIn covers human, environmental (dirty areas, rivers, ponds, parks) and
@@ -244,6 +244,33 @@
   than a personal inbox for the public imprint and DSA contact. Get a lawyer to confirm the
   obligations of an individual operator in Hungary. When a company is founded, it takes over as
   controller and users are informed (privacy notice update).
+
+### ADR-026 · Positioning: a social platform for mutual help, not a gig marketplace
+- **Status:** Accepted (founder direction)
+- **Decision:** HelpIn is a social platform where **locals, newcomers/immigrants and
+  communities** help one another for free. It is not a task or jobs marketplace. Help is free by
+  rule (CAT-06): no prices, paid work, jobs, selling, renting or ads.
+- **Consequences:** a **Newcomers & language** category group; languages on profiles; communities;
+  thank-you posts; scam protection; examples and copy always show mutual help (a letter
+  translated, a pond cleaned), never errands-for-hire. The bottom tab "Feed" becomes
+  **"Community"** (feed + communities).
+
+### ADR-027 · Languages as a bridge
+- **Status:** Accepted
+- **Decision:** profiles list languages spoken; problems can name the language help needed;
+  "Speaks your language" badges; language-based alerts. Machine translation (EU-hosted) comes
+  after launch (LANG-05).
+- **Why:** the language barrier is the biggest wall between newcomers and locals in Budapest. An
+  English-only UI plus language matching works for launch; Hungarian UI and translation follow.
+
+### ADR-028 · Communities and thank-you posts in the first release
+- **Status:** Accepted
+- **Decision:** communities (district, language & culture, students, civic, interest) with a
+  feed, a Welcome thread and shared problems, created by the admin during the beta.
+  **Membership is private by default** (GDPR special-category risk). Thank-you posts tag helpers
+  only after they approve.
+- **Why:** communities give newcomers an obvious first step and give existing groups a reason to
+  move their mutual help onto HelpIn. Thank-you posts make helping visible and social.
 
 ---
 

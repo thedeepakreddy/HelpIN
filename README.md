@@ -1,11 +1,12 @@
 # HelpIn
 
-**See a nearby problem → help → solve it → earn reputation.**
+**A social platform where Budapest's locals, newcomers and communities help one another.**
 
-HelpIn is a hyperlocal, map-first app where people post real-world problems in an approximate
-area, neighbours offer help, and the person who asked confirms when it's solved. Solved problems
-close automatically, and helpers earn karma. A separate local photo feed exists, but it stays
-secondary to the problem-solving loop.
+HelpIn is a hyperlocal, map-first social platform for **mutual help**. People post real-world
+problems in an approximate area, from understanding a letter from the district office to a
+polluted pond. Neighbours, whether locals or newcomers, offer help for free, and the asker confirms
+when it's solved. Helpers earn karma. Around that loop sits a social layer: a local feed, thank-you
+posts, and communities. HelpIn is **not** a gig or task marketplace: no prices, jobs or paid work.
 
 **Launching in Budapest, Hungary · web app first (installable PWA), native apps later · English.**
 
@@ -59,5 +60,5 @@ secondary to the problem-solving loop.
 
 ## Navigation
 
-`Problems | Feed | ⊕ Create | Chat | Profile` (bottom bar on phones, sidebar on desktop), and the
+`Problems | Community | ⊕ Create | Chat | Profile` (bottom bar on phones, sidebar on desktop), and the
 app always opens on **Problems**.

@@ -18,7 +18,7 @@
 | No launch strategy | Phase 7: city-wide Budapest launch run as many small networks: seed hubs, founding helpers, liquidity per district | Hyperlocal apps live or die on local density. |
 | Problem details fixed after posting | **Progress updates** timeline on every problem tab (Phase 2) | Helpers need to know what is still needed *now*. |
 | Problems stay until closed | **Response rule** (personal problems): once help starts, the raiser must respond within 2 days or lose karma; removed if nobody is active. Community problems exempt. (Phase 4) | Keeps the map live, respects helpers' time, and fixes the "never confirmed" problem. |
-| A short category list | **Any problem:** People, Environment (garbage, rivers, ponds, parks…), Roads, Utilities, Safety, Other | Matches what people actually need to post. |
+| A short category list | **Any problem:** Everyday help, Newcomers & language, Environment (garbage, rivers, ponds, parks…), Roads, Utilities, Safety, Other | Matches what people actually need to post. |
 | Mobile app (Expo) | **Web app first** (installable PWA), native apps later (Phase 8) | Founder decision: fastest way to launch; no app-store review. |
 | Market not specified | **Budapest, Hungary (EU)**, English UI | Founder decision; adds GDPR and DSA work to Phase 6. |
 

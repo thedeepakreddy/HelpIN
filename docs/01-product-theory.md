@@ -7,6 +7,46 @@
 
 ---
 
+## 0. What HelpIn is, and what it isn't
+
+**HelpIn is a social platform where people help one another.** It's built for the people of
+Budapest: **locals**, **newcomers and immigrants**, and the **communities** they form, so that
+nobody has to face a local problem alone.
+
+| HelpIn **is** | HelpIn **is not** |
+|---|---|
+| A social network built around **mutual help**: neighbours, locals and newcomers helping each other for free | A gig or task marketplace ("move my sofa for €20"), a jobs board, or an "opportunities" page |
+| A place to ask "can someone help me understand this letter?" and be answered by a neighbour | A paid-services directory or advertising channel |
+| A bridge between **newcomers and locals**: language help, paperwork, settling in, local know-how | Another expat forum that only newcomers read |
+| A home for **communities**: district neighbours, cultural communities, students, civic groups | A city complaints portal |
+| A way to fix **shared problems together**: a polluted pond, a dark street, a water outage | An emergency service |
+
+### Who it's for
+
+| Group | What they need | What they give |
+|---|---|---|
+| **Newcomers & immigrants** (international students, expats, workers, refugees) | Language help, understanding Hungarian paperwork and offices, finding a doctor or school, local know-how, a first friendly face | Their own skills and languages, help with everyday problems, energy for community projects |
+| **Locals** (long-time Budapest residents) | Help with everyday problems, a stronger neighbourhood, a way to fix shared issues | Language, local knowledge, how things work here, a welcome |
+| **Communities** (district neighbours, cultural & language communities, student groups, civic groups) | A place to organise, welcome new members, and solve shared problems together | Members who show up, local trust, collective action |
+
+The most valuable thing HelpIn creates is a **connection between people who would never have
+met**: a local who explains a letter from the district office to a newcomer, who later helps the
+same local's street clean-up.
+
+### Rules that follow from this
+
+1. **Help is free, always.** No payments, no prices, no "paid help wanted". Asking someone to do
+   paid work, offering jobs, selling or renting things is against the guidelines (Domain CAT-06).
+   Paying for favours kills the neighbourly motivation (§3).
+2. **Everyday help and belonging are both first-class.** "Need a hand" sits next to "Language &
+   translation help" and "Paperwork & official offices".
+3. **Language is a bridge, not a barrier.** Profiles show the languages people speak, problems
+   can say which language help is needed, and translation comes later (Domain §13).
+4. **The social layer matters.** Profiles, the feed, thank-you posts and communities are how
+   strangers come to trust each other. Help stays at the centre, and the social layer surrounds it.
+
+---
+
 ## 1. Thesis
 
 **HelpIn turns "someone near me has a problem" into "someone near me solved it", and makes that visible.**
@@ -167,7 +207,7 @@ This becomes a first-class field: **`kind = request | issue`**.
 
 | | **Request** | **Issue** |
 |---|---|---|
-| Default categories | People: need a hand, lost & found, borrow/lend, elderly support, pets, vehicle help | Environment (garbage, rivers/lakes/ponds, parks, trees, pollution), roads & public spaces, utilities |
+| Default categories | Everyday help (need a hand, lost & found, borrow/lend, elderly support, pets) and Newcomers & language (translation, paperwork, finding services, settling in) | Environment (garbage, rivers/lakes/ponds, parks, trees, pollution), roads & public spaces, utilities |
 | Value to users | Someone actually solves it | Aggregation ("23 affected"), status updates, collective pressure |
 | Who confirms solved | The asker | The original reporter, **or** ≥ 3 affected users confirming "fixed", **or** auto-expire |
 | Karma | Helpers credited by the asker | Helpers who contributed (e.g. filed the complaint, posted the fix ETA), credited by the reporter. MVP: same flat amount. |
@@ -282,15 +322,24 @@ Launch market: **Budapest, Hungary (EU)**. 112 is the EU-wide emergency number.
 
 ---
 
-## 8. The social feed: role and guardrails
+## 8. The social layer: feed, thank-yous and communities
 
-**Why have a feed at all?** Most people have a real problem only a few times a month, so the
-problem loop alone doesn't give a reason to open the app daily. A local photo feed gives a
-low-stakes habit and builds a sense of "my neighbourhood". That makes people more willing to help
-when a problem does show up.
+HelpIn is a **social platform for mutual help**, so the social layer isn't decoration. It's how a
+newcomer and a local who've never met come to trust each other.
 
-**Why it's dangerous:** feeds are addictive by design and can easily become the whole product.
-At that point HelpIn is just another Instagram clone that loses to Instagram.
+**What the social layer does:**
+- **Builds trust before help is needed.** Seeing someone's posts, languages, thank-yous and
+  helped-count makes it easier to accept (or offer) help.
+- **Gives a reason to come back** between problems. Most people only have a real problem a few
+  times a month.
+- **Celebrates helping.** After a problem is solved, the asker is invited to post a **thank-you**
+  to the feed that tags the helpers (with their consent). Helping becomes visible and social.
+- **Gives communities a home** (Domain §14): district neighbours, cultural and language
+  communities, student groups and civic groups get a shared space for posts, welcome threads and
+  shared problems.
+
+**The risk:** feeds are addictive by design and can drift into an Instagram clone, which loses to
+Instagram. HelpIn's feed exists to connect people around helping, not for endless scrolling.
 
 Guardrails:
 
@@ -319,9 +368,12 @@ When in doubt, apply these in order:
 6. **Safety ships with the feature, not after it.**
 7. **Model for clustering on day one, automate it later.** Every problem belongs to an incident
    from the start, so AI grouping later is a background job, not a migration.
-8. **Problems first, feed second.**
+8. **Help is the heart; the social layer builds trust.** Every social feature should make people
+   more likely to help or be helped.
 9. **Help deserves a response.** Once someone offers help, the raiser answers within 2 days.
    Community problems are exempt.
+10. **Free and mutual, never a gig.** No prices, no paid tasks, no jobs. Help flows both ways
+    between locals and newcomers.
 
 ---
 
@@ -356,7 +408,11 @@ These are hypotheses for the Budapest launch, measured per district. Recalibrate
 | Askers don't confirm, so the loop never closes | High | High | 2-day response rule with penalty; reminders offer one-tap "It's solved"; helper "I think it's solved" nudge |
 | Map fills with stale problems | High | High | Personal problems with no activity for 2 days after help started are removed; "Updated 2 h ago" freshness on every card |
 | Penalty feels unfair, so people stop posting | Medium | Medium | No clock until help starts; withdraw is always free; reminders at 24 h and 44 h; community problems exempt; small first penalty; moderator can void |
-| Feed eats the product | Medium | High | §8 guardrails, ship feed later |
+| Feed eats the product | Medium | High | §8 guardrails; the feed shows thank-yous and community posts, not endless entertainment |
+| Drift into a gig/jobs marketplace ("move my sofa for €20") | Medium | High | Help is free by rule (CAT-06); no price fields; paid-work requests are reportable and removed; copy and examples always about mutual help |
+| Scams targeting newcomers (fake landlords, "visa agents", requests for money) | Medium | High | No selling/renting/paid services allowed; chat warns "Never send money to someone you met on HelpIn"; "Scam" report reason; newcomer-safety tips in onboarding |
+| Language barrier keeps locals and newcomers apart | High | High | Languages on every profile, "language needed" on problems, language-help category, translation later; Hungarian UI as the first added language |
+| Newcomers feel like "receivers only" | Medium | Medium | Encourage two-way help: newcomers' skills and languages shown on profiles; community clean-ups and events anyone can join |
 | Safety incident (stalking/harassment) | Low–Medium | Fatal for trust | Area-only location, no cold DMs, EXIF stripping, block/report from day one, 18+ only |
 | Karma farming | Medium | Medium | §6 mitigations, ledger reversibility |
 | False emergencies / panic | Medium | High | Verified-only emergency posts, interstitial, rapid moderation |
@@ -370,5 +426,7 @@ These are hypotheses for the Budapest launch, measured per district. Recalibrate
 Payments · AI clustering (use a manual "Same issue" button instead, which also produces labelled
 training data for later) · algorithmic feed · stories/reels · open DMs · business/brand accounts ·
 integrations with civic authorities · native iOS/Android apps (web first; native planned next) ·
+jobs, paid tasks, selling or renting (never: HelpIn is free mutual help) · machine translation
+(planned after launch) ·
 multiple languages (English only, but i18n-ready
 strings from day one).
