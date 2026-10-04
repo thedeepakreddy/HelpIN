@@ -176,7 +176,7 @@ helpin/
 │   ├── contracts/       # zod schemas for every request/response + inferred TS types
 │   ├── domain/          # pure business rules & state machines (no I/O)
 │   ├── geo/             # H3 snapping, viewport → cells, rings, resolution policy
-│   ├── config/          # categories, check-in policy, rate limits, karma amounts (typed)
+│   ├── config/          # categories, response rule, rate limits, karma amounts (typed)
 │   └── db/              # SQL migrations, Kysely types (generated), seed data
 ├── infra/
 │   ├── docker-compose.yml   # local Postgres for integration tests
@@ -265,7 +265,7 @@ flowchart LR
   D --> C4[media.process]
   D --> C5[analytics sink]
   D -. later .-> C6[ai.dedupe]
-  Cron[Cron jobs] --> J1[check-in sweep: reminders · abandon · expire · every 1 min]
+  Cron[Cron jobs] --> J1[response sweep: reminders · penalties · abandon · expire · every 1 min]
   Cron --> J2[solve reminders · every 15 min]
   Cron --> J3[purge private locations · hourly]
   Cron --> J4[karma velocity flags · hourly]
@@ -349,10 +349,10 @@ candidates = users where
 | SolveClaimed + reminders | Asker | "Did Ankit solve it? Tap to confirm" (one-tap actions) |
 | ProblemSolved / HelperCredited | Helpers, affected users | "🎉 +10 karma" / "Water issue marked fixed" |
 | IncidentAffectedAdded (batched hourly) | Reporter | "5 more neighbours are affected" |
-| CheckInDue (75% / deadline / final warning) | Asker | "Still need help with *Need a ladder*?" with buttons **Still need help** · **It's solved** · **Withdraw** |
+| ResponseDue (24 h / 44 h after last response, personal problems with helpers) | Raiser | "Ankit offered to help and is waiting for you" / "4 h left before you lose 5 karma", with buttons **Still need help** · **It's solved** · **Withdraw** |
+| RaiserPenalized | Raiser; helpers with offers | "You didn't respond for 2 days (−5 karma)" / "The asker hasn't responded in 2 days" |
 | ProblemUpdated (batched 30 min) | Helpers with offers, affected users | "Priya updated: Partly solved, need one more person" |
-| ProblemAbandoned | Asker; helpers with offers | "Removed for no updates (−5 karma)" / "The asker stopped updating this problem" |
-| StewardInvited | Most recently active affected user | "The reporter went quiet. Keep this issue alive as steward?" |
+| ProblemAbandoned | Raiser; helpers with offers | "Removed: no activity for 2 days" |
 
 Every notification is also stored in `notifications` for the in-app inbox. Push is delivered via
 **Expo Push Service** (handles FCM/APNs), batched 100 per request, and invalid tokens are pruned
@@ -395,7 +395,7 @@ from delivery receipts.
 | Users | `GET /users/{id}` · `GET /users/{id}/solver-history` · `GET /users/{id}/posts` · `GET /users/{id}/problem-photos` |
 | Map & incidents | `GET /map?bbox&zoom` · `GET /incidents/similar?cell&category` · `GET /incidents/{id}` |
 | Problems | `POST /problems` · `POST /problems/{id}/withdraw` · `POST /problems/{id}/confirm-solved` · `POST /problems/{id}/credit` (after quorum, R-22) · `GET /me/problems` |
-| Progress updates | `GET /problems/{id}/updates` · `POST /problems/{id}/updates` (asker; affected/helpers on issues, R-40…R-46) · `POST /problems/{id}/still-need-help` (one-tap check-in, R-51) · `POST /stewardship/{inviteId}/accept` (R-56) |
+| Progress updates | `GET /problems/{id}/updates` · `POST /problems/{id}/updates` (raiser and helpers; affected neighbours on issues, R-40…R-46) · `POST /problems/{id}/still-need-help` (one-tap response, R-53) |
 | Same here / issues | `POST /incidents/{id}/affected` · `DELETE /incidents/{id}/affected` · `POST /incidents/{id}/fixed` |
 | Help | `POST /problems/{id}/offers` · `GET /problems/{id}/offers` (asker) · `POST /offers/{id}/accept` · `…/decline` · `…/withdraw` · `…/claim-solved` · `GET /me/offers` |
 | Chat | `GET /conversations` · `GET /conversations/{id}/messages?before|after` · `POST /conversations/{id}/messages` · `POST /conversations/{id}/read` · `POST /conversations/{id}/share-location` |
@@ -417,8 +417,9 @@ need an app release:
   Groups: People · Environment · Roads & public spaces · Utilities · Safety · Other
   (full catalogue: Domain Model §11).
 - **Urgency:** labels, icons, colours.
-- **Check-in policy:** interval, max lifetime, reminder points and grace per (kind, urgency)
-  (R-52…R-54); penalty amounts and escalation (K-12, K-13).
+- **Response rule:** response window (48 h), reminder points (24 h, 44 h), which kinds it applies
+  to (personal only), and max lifetimes per (kind, urgency) (R-50…R-57); penalty amounts and
+  escalation (K-12, K-13).
 - **Karma:** award amount, cooldowns, caps (K-01…K-07).
 - **Rate limits** per trust level.
 - **Launch areas:** `{ id, name, cells_r7[], enabled, opened_at }`. A launch area is a set of
@@ -460,7 +461,7 @@ need an app release:
   profile    header (karma · neighbours helped · reliability · badges) → tabs: Posts | Problem photos | Solved history
 incident/[id]   details · photos · 📌 latest progress update + timeline · "Updated 2 h ago"
                 "I can help" / "Same here" · offers (asker) · [Post update] [Still need help] (asker)
-                check-in deadline banner (asker only) · confirm solved
+                "Reply within 18 h" banner (raiser, personal problems with helpers) · confirm solved
 settings        alert prefs, blocked users, privacy, delete account, guidelines, about
 ```
 

@@ -120,11 +120,15 @@
 - **Why:** helpers need the *current* need, not the original description. One timeline for both
   kinds is simpler than two mechanisms.
 
-### ADR-014 · Asker check-in rule with abandonment penalty
-- **Status:** Accepted (founder request); numbers to be tuned (Q11)
-- **Decision:** open problems have a check-in deadline per (kind, urgency). Missing it plus a
-  grace period → `abandoned`, removed from the map, −5 karma (escalating). Withdraw is always
-  free. This replaces fixed TTL + manual "extend".
+### ADR-014 · Raiser response rule with silence penalty
+- **Status:** Accepted (founder decisions Q11–Q13)
+- **Decision:** for **personal** problems only, a 48 h response clock starts at the first help
+  offer. Any raiser response resets it (accept/decline, chat reply, progress update, "Still need
+  help", confirm). 48 h of silence → −5 karma (escalating), once per problem. Helper updates keep
+  the problem on the map; if nobody is active for 48 h it's `abandoned` and removed. **Community
+  problems never get penalties** and are never removed for silence. Withdraw is always free. This
+  replaces fixed TTL + manual "extend", and the earlier steward-handover idea (no longer needed,
+  because community problems aren't removed for silence).
 - **Why:** keeps the map live, protects helpers' time, and gives askers a reason to confirm
   solved (the top risk to the core loop).
 - **Trade-off:** a penalty can feel harsh and might discourage posting. Mitigations are
@@ -159,6 +163,6 @@ These change the plan. Everything else has a sensible default already chosen abo
 | **Q8** | **Brand spelling:** "HelpIN", "Helpin", or "HelpIn"? | "HelpIN" in docs (repo name) | Store listing, logo, copy |
 | **Q9** | **Team & budget:** solo founder + AI assistant? Any designer? | Solo + AI; design from a simple token system | Phase sizing, design-system effort |
 | **Q10** | **Moderation staffing:** who reviews reports in the beta? | Founder, with a 24 h SLA, and 2 h for `serious` | Safety promises we can actually keep |
-| **Q11** | **Check-in numbers:** are the intervals (request 72 h / 24 h / 6 h; issue 7 d / 3 d / 12 h) and the penalty (−5, then −10, then posting limit) right? | As written in Domain §4.7 and K-12/K-13 | Too strict → people stop posting; too loose → ghost problems |
-| **Q12** | **Issue steward handover** (R-56) in the first release, or simply remove abandoned issues at first? | Include it. Otherwise a long-running civic issue with 20 affected neighbours disappears because one person went quiet. | Build effort vs. fairness to affected neighbours |
-| **Q13** | **Should helpers' own updates count as check-ins?** | No. Only the asker's actions count, as you asked | Strictness of the activity rule |
+| ~~Q11~~ | ✅ **Answered:** the timer starts once people start helping. If the raiser doesn't respond for 2 days, the penalty applies. | → R-51…R-55 | |
+| ~~Q12~~ | ✅ **Answered:** penalties apply only to personal problems. Community problems never get penalties. (Steward handover dropped as no longer needed.) | → R-50, R-58, K-12 | |
+| ~~Q13~~ | ✅ **Answered:** if helpers keep updating, the problem stays alive (the raiser's penalty still applies if they ignore helpers). | → R-42, R-56 | |

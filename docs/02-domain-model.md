@@ -17,8 +17,8 @@ Use these words in code, UI copy, and conversation. One word per concept.
 | **Kind** | `request` (personal, a neighbour can solve) or `issue` (shared/civic). See Theory §5. | Category |
 | **Category** | What it's about: people, environment, roads, utilities, safety, or anything else (catalogue in §11). Sets the default kind and default urgency. | Kind |
 | **Progress update** | A public post on a problem's tab saying what has changed and what is still needed ("Got the tools, still need one more person"). Posted mainly by the asker. | A chat message (private) |
-| **Check-in** | Any asker action that proves the problem is still live: a progress update (including one-tap "Still need help"), accepting an offer, or confirming solved. Must happen before the **check-in deadline**. | — |
-| **Abandoned** | Terminal status for a problem whose asker missed the check-in deadline and its grace period. It's removed from the map and the asker gets a karma penalty. | Withdrawn (honest, no penalty) |
+| **Response clock** | Personal problems only: once the first helper offers, the raiser must respond (accept/decline, reply in chat, post an update, tap "Still need help", confirm) at least every **48 h**, or lose karma. | — |
+| **Abandoned** | Terminal status for a personal problem that nobody (raiser or helpers) has updated for 48 h after help started. Removed from the map. | Withdrawn (honest, no penalty) |
 | **Urgency** | `basic` · `medium` · `serious`. Always shown as a **label + icon + colour**, never colour alone. | Priority/ranking |
 | **Area** | The public, approximate location of a problem: an H3 hexagon cell. | Exact location |
 | **Help offer** | A helper saying "I can help" on a problem, optionally with a message. | A chat message |
@@ -67,7 +67,7 @@ flowchart LR
 |---|---|---|
 | Identity & Profiles | users, profiles, devices, blocks, notification prefs | signUp, updateProfile, setHomeArea, block |
 | Geo | H3 snapping, locality names, launch areas | snapToArea, localityFor, isInLaunchArea |
-| Problems & Incidents | incidents, problems, problem_updates, problem_photos, incident_affected, private locations | createProblem, markSameHere, withdraw, postUpdate, checkInSweep (system) |
+| Problems & Incidents | incidents, problems, problem_updates, problem_photos, incident_affected, private locations | createProblem, markSameHere, withdraw, postUpdate, responseSweep (system) |
 | Help & Resolution | help_offers, resolution logic | offerHelp, acceptOffer, declineOffer, withdrawOffer, claimSolved, confirmSolved, confirmFixed (issues) |
 | Karma | karma_entries, cached balances | awardForSolve, reverseEntry |
 | Chat | conversations, participants, messages | openForOffer, sendMessage, shareExactLocation |
@@ -135,9 +135,9 @@ Notes on what changed from the original entity list, and why:
 ```mermaid
 stateDiagram-v2
   [*] --> open : createProblem
-  open --> open : check-in (update / accept / …)\nresets check_in_due_at
+  open --> open : raiser response / helper update\n(personal: resets 48 h clock)
   open --> solved : confirmSolved (asker)\nor fixed-quorum (issue)
-  open --> abandoned : check-in deadline + grace missed (system)\nasker penalised
+  open --> abandoned : personal only: nobody active 48 h\nafter help started (system)
   open --> expired : max lifetime reached (system)\nno penalty
   open --> withdrawn : withdraw (asker)\nno penalty
   open --> removed : moderator
@@ -155,14 +155,14 @@ and go.
 
 | Rule | |
 |---|---|
-| **R-01** | A problem is created `open` with `check_in_due_at = now + interval(kind, urgency)` and `max_life_at = now + max_lifetime(kind, urgency)` (§4.7, config). |
+| **R-01** | A problem is created `open` with `max_life_at = now + max_lifetime(kind, urgency)` (R-57). Personal problems get a 48 h response clock once help starts (§4.7). |
 | **R-02** | Only the asker can `withdraw`, post asker progress updates, or `confirmSolved`. |
-| **R-03** | An open problem stays open as long as the asker keeps checking in, up to its max lifetime (§4.7). There's no manual "extend". Staying active is how a problem stays alive. |
+| **R-03** | An open problem stays open until it's solved, withdrawn, removed for inactivity (personal problems only, R-56), or reaches its max lifetime. There's no manual "extend". |
 | **R-04** | `solved`, `abandoned`, `expired`, `withdrawn`, `removed` are terminal. There's no reopen, so the user posts a new problem. This keeps karma consistent. |
 | **R-05** | Terminal problems leave the active map immediately. They remain visible on the owner's profile and in solver history (except `removed`). |
 | **R-06** | Every transition is written with an optimistic-concurrency check (`WHERE status = 'open'`). Double-taps and races can't double-solve or double-award. |
 | **R-07** | Every command accepts an idempotency key. Replaying the same key returns the original result. |
-| **R-08** | Check-in reminders and the abandonment process are defined in §4.7 (R-50…R-58). Reaching `max_life_at` sends a "Your problem has closed. Post again if you still need help" notice. |
+| **R-08** | Response reminders, the penalty and removal for inactivity are defined in §4.7 (R-50…R-60). |
 
 ### 4.2 Help offer
 
@@ -251,47 +251,59 @@ public **progress timeline**, with the latest update pinned at the top.
 |---|---|
 | **R-40** | The asker can post a progress update on their open problem. An update has a **progress status**, optional text (≤ 500 chars) and up to 3 photos. Statuses: 🔵 *Still need help* · 🟢 *Making progress* · 🟠 *Partly solved* · 🟣 *Need has changed*. A *note* update (status unchanged) is also allowed. |
 | **R-41** | The latest asker update is **pinned** at the top of the problem tab and summarised on the map card ("Updated 2 h ago · Partly solved"). The full timeline is visible to everyone who can see the problem. |
-| **R-42** | For `kind = issue`, affected users and helpers with an offer may also post updates, labelled by role ("Affected neighbour", "Helper"). Only the asker's updates count as check-ins (R-51). |
+| **R-42** | Helpers with an offer may post progress updates on **any** problem, and on issues affected neighbours may too. Updates are labelled by role ("Helper", "Affected neighbour"). Helper updates keep a personal problem on the map (R-56) but don't count as the raiser's response (R-53). |
 | **R-43** | Every asker update notifies helpers with an active offer (and, for issues, affected users). Notifications are batched at most once per 30 min per problem. |
 | **R-44** | Update photos go through the media pipeline (EXIF stripped, L-08), belong to the problem, and appear in the asker's **Problem photos** profile tab. They never appear in the feed (F-03). |
 | **R-45** | Updates are reportable (S-04). Rate limit: 10 updates per problem per day per author. |
 | **R-46** | *Need has changed* requires text explaining the new need, so helpers aren't misled by the original description. The title and description stay as originally posted, and the timeline tells the story. |
 
-### 4.7 Asker activity rule (check-ins & abandonment)
+### 4.7 Raiser response rule (accountability)
 
-**Principle: an open problem must be live.** A stale problem (already solved, no longer needed,
-or forgotten) wastes helpers' time and teaches them that the map can't be trusted. So the asker
-must keep it updated, or it's removed and they lose karma. **Honesty is never penalised, only
-silence is.** Withdrawing ("no longer needed", "solved elsewhere") is always free.
+**Principle: once neighbours start helping, the raiser owes them a response.** Helpers give their
+time, and a raiser who disappears wastes it and teaches helpers that the map can't be trusted.
+**Honesty is never penalised, only silence is.** Withdrawing ("no longer needed", "solved
+elsewhere") is always free.
+
+| | 🙋 Personal problem (`request`) | 🌳 Community problem (`issue`) |
+|---|---|---|
+| Timer before anyone offers help | None | None |
+| Timer after help starts | **48 h response clock** for the raiser | None |
+| Penalty for silence | **Yes**: −5 karma (escalating) | **Never** |
+| Removed for silence | Yes, if *nobody* (raiser or helpers) updates for 48 h | **Never**. Ends by solve, "Fixed now" quorum, withdraw, or max lifetime |
+| Helpers' updates | Keep the tab on the map, but don't save the raiser from the penalty | Keep everyone informed |
+
+How it plays out for a personal problem:
 
 ```mermaid
 stateDiagram-v2
   direction LR
-  [*] --> Live : posted / check-in
-  Live --> Reminded : 75% of interval elapsed\n(push: "Still need help?")
-  Reminded --> Live : check-in
-  Reminded --> Overdue : check_in_due_at reached\n(push: "Update now")
-  Overdue --> Live : check-in
-  Overdue --> Abandoned : grace period over\n(final warning sent earlier)
-  Abandoned --> [*] : removed from map\n−5 karma to asker
+  [*] --> NoClock : posted
+  NoClock --> Clock : first help offer arrives\n48 h clock starts
+  Clock --> Clock : raiser responds\nclock resets to 48 h
+  Clock --> Penalised : 48 h with no raiser response\n(reminders at 24 h and 44 h)\n−5 karma, once per problem
+  Penalised --> Clock : raiser comes back and responds\n(penalty stays)
+  Penalised --> Abandoned : no update from raiser OR helpers\nfor 48 h → removed from map
+  Clock --> Abandoned : nobody active for 48 h
+  Abandoned --> [*]
 ```
 
 | Rule | |
 |---|---|
-| **R-50** | Each open problem has `check_in_due_at`. Missing it plus the grace period makes the problem `abandoned`. |
-| **R-51** | **Check-ins** (each resets `check_in_due_at = now + interval`): an asker progress update (including the one-tap **"Still need help"** button on the reminder notification), accepting an offer, or confirming solved. Withdrawing ends the problem without penalty. **Chat messages don't count**, because they're private and helpers browsing the map can't see them. |
-| **R-52** | Check-in intervals and max lifetimes (config):<br>• request: basic every **72 h** (max 30 d) · medium every **24 h** (max 14 d) · serious every **6 h** (max 72 h)<br>• issue: basic every **7 d** (max 90 d) · medium every **3 d** (max 60 d) · serious every **12 h** (max 7 d)<br>Issues get longer intervals because civic and environmental fixes (a polluted pond, a broken road) take weeks. |
-| **R-53** | **Reminders** (push + in-app, each with one-tap "Still need help" / "It's solved" / "Withdraw"): at 75% of the interval, and at the deadline. |
-| **R-54** | **Grace period** after the deadline = 25% of the interval (min 1 h, max 24 h). A final warning goes out at the start of grace: "This problem will be removed in 6 h and you'll lose 5 karma." |
-| **R-55** | When grace ends without a check-in, the problem becomes `abandoned` in one transaction: removed from the map, open offers → `closed`, helpers notified ("The asker stopped updating this problem"), penalty applied (K-12), exact location purge scheduled (L-07). |
-| **R-56** | **Issue steward handover:** for `kind = issue`, if any affected user has been active (Same here, update, or Fixed-now vote) within the last interval, the *incident* isn't removed. The asker's problem still becomes `abandoned` (penalty applies), and the most recently active affected user is invited to become **steward**. Accepting promotes their "Same here" into a problem they own, with a fresh check-in schedule. If nobody accepts within the grace period, the incident closes. |
-| **R-57** | **No penalty** when: the problem reaches `max_life_at` (→ `expired`); the asker withdraws; the problem was hidden by moderation during the window; or a moderator voids it because of a system fault such as failed notifications (reversal entry, K-08). |
-| **R-58** | Askers see their check-in deadline on their own problem ("Update within 18 h to keep this live"). Helpers see freshness ("Updated 2 h ago"), not the deadline. |
+| **R-50** | The response rule applies **only to personal problems** (`kind = request`). Community problems (`kind = issue`) never get a response clock, a penalty, or removal for silence (R-58). |
+| **R-51** | **No help, no clock.** Until the first help offer arrives, there's no deadline and no penalty. The problem stays open until solved, withdrawn, or its max lifetime (R-57). |
+| **R-52** | **The clock starts when the first help offer arrives:** `response_due_at = offer time + 48 h` (config: `response.window = 48h`). |
+| **R-53** | **Raiser responses** (each resets `response_due_at = now + 48 h`): accepting or declining an offer, replying in a problem chat, posting a progress update, tapping **"Still need help"**, or confirming solved. Withdrawing ends the problem with no penalty. |
+| **R-54** | **Reminders** (push + in-app, with one-tap *Still need help* · *It's solved* · *Withdraw*): at **24 h** without a response ("Ankit offered to help 1 day ago and is waiting for you") and at **44 h** ("4 hours left before you lose 5 karma"). |
+| **R-55** | **Penalty:** when `response_due_at` passes with no raiser response, the raiser gets the penalty (K-12), **at most once per problem**. Helpers with offers are told "The asker hasn't responded in 2 days". If the raiser comes back later, they can still respond, confirm and credit, but the penalty stays. |
+| **R-56** | **Helpers keep the tab alive.** A personal problem stays on the map while *anyone* has been active in the last 48 h: a raiser response (R-53) or a public progress update from a helper with an offer (R-42). Helper chat messages don't count, because messaging an absent raiser shouldn't keep a ghost alive. If nobody has been active for 48 h, the problem becomes `abandoned` in one transaction: removed from the map, open offers → `closed`, helpers notified, exact-location purge scheduled (L-07), and the penalty applied if not already. |
+| **R-57** | **Max lifetime** (no penalty): request basic **30 d** · medium **14 d** · serious **72 h**; issue basic **90 d** · medium **60 d** · serious **7 d**. Reaching it → `expired`, with a "Post again if you still need help" notice. |
+| **R-58** | **Community problems carry no penalties and are never removed for silence.** If the raiser goes quiet, helpers and affected neighbours keep posting updates, and the issue ends when the raiser confirms, when 3 affected neighbours confirm "Fixed now" (R-21), when it's withdrawn, or at max lifetime. |
+| **R-59** | **Exemptions:** no penalty if the problem was hidden by moderation during the window. A moderator can void a penalty caused by a system fault such as failed notifications (reversal entry, K-08). |
+| **R-60** | **Visibility:** while the clock runs, the raiser sees a banner on their problem ("Reply within 18 h to keep your karma"). Helpers see "Updated 2 h ago" and "Asker last active 1 d ago", not the deadline. |
 
 *Why this also fixes the confirmation problem:* the biggest risk in the core loop is askers who
-get helped and then never tap "Confirm solved" (Theory §11). Under this rule a forgotten problem
-costs the asker karma, and the reminder that saves it offers **"It's solved"** as the one-tap
-answer.
+get helped and then never tap "Confirm solved" (Theory §11). Once help has started, silence costs
+the raiser karma, and the reminder that saves it offers **"It's solved"** as the one-tap answer.
 
 ---
 
@@ -364,10 +376,10 @@ ledger at any time.
 | **K-09** | `neighbours_helped` = number of **distinct askers** who credited this helper (non-reversed entries, including zero-amount ones). |
 | **K-10** | **Velocity flags** (no automatic penalty, these create a moderation item): > 5 credits between the same pair in 30 days; > 15 credits to one helper in 24 h; > 5 solved problems in 24 h by one asker crediting the same helper. |
 | **K-11** | Askers earn no karma in MVP (anti-farming). Their incentive to close the loop is avoiding the abandonment penalty (K-12). |
-| **K-12** | **Abandonment penalty:** when a problem becomes `abandoned` (R-55), the asker gets **−5 karma** (`reason = 'abandonment_penalty'`). This is the **only** way karma decreases apart from moderator reversals. Users can never take karma from each other, so there's no retaliation loop. |
-| **K-13** | **Escalation:** 2nd abandonment within 30 days = **−10**. 3rd within 30 days = **−10** and the asker is put **on notice**: max 1 new problem per day for 14 days. |
-| **K-14** | Karma **can go negative**, so the penalty means something even for new users. A new user starts at 0 and abandoning their first problem gives −5. |
-| **K-15** | **Reliability** (shown on the profile next to karma): % of the user's problems in the last 90 days that ended `solved`, `withdrawn` or `expired`, as opposed to `abandoned`. "Closes the loop: 92%". Helpers can use it to judge whether an asker is worth their time. Shown once the user has ≥ 3 finished problems. |
+| **K-12** | **Silence penalty:** when the raiser of a **personal** problem misses the 48 h response window after help started (R-55), they get **−5 karma** (`reason = 'abandonment_penalty'`), at most once per problem. It **never applies to community problems**. This is the **only** way karma decreases apart from moderator reversals. Users can never take karma from each other, so there's no retaliation loop. |
+| **K-13** | **Escalation:** 2nd penalty within 30 days = **−10**. 3rd within 30 days = **−10** and the raiser is put **on notice**: max 1 new problem per day for 14 days. |
+| **K-14** | Karma **can go negative**, so the penalty means something even for new users. A new user starts at 0, and ignoring helpers on their first problem gives −5. |
+| **K-15** | **Reliability** (shown on the profile next to karma): % of the user's personal problems in the last 90 days that received help, where the user never missed the 48 h response window. "Responds to helpers: 92%". Helpers can use it to judge whether an asker is worth their time. Shown once the user has ≥ 3 such problems. |
 
 Later (not MVP): weighting by urgency/impact, badges ("First Help", "10 Neighbours", "Water
 Warrior"), solver levels, streaks, and decay of inactive reputation.
@@ -408,7 +420,7 @@ Warrior"), solver levels, streaks, and decay of inactive reputation.
 | `new` | Account < 7 days **or** never credited | Lower rate limits; can't post `serious` urgency without phone verification |
 | `member` | ≥ 7 days and phone-verified | Normal limits |
 | `trusted` | `neighbours_helped ≥ 5` and no upheld reports in 90 d | Higher limits; "Trusted neighbour" badge (later) |
-| `on_notice` | 3 abandonments within 30 d (K-13) | Max 1 new problem per day for 14 days; can still help others |
+| `on_notice` | 3 silence penalties within 30 d (K-13) | Max 1 new problem per day for 14 days; can still help others |
 | `restricted` | Set by moderator | Read-only; can't post, offer, or message |
 
 ### Default rate limits (config)
@@ -451,9 +463,9 @@ Written in the same transaction as the state change, then consumed asynchronousl
 | `ProblemSolved` | Notifications (helpers + affected), Map cache, Location purge scheduler, Analytics |
 | `HelperCredited` | Notifications ("You earned 10 karma"), Profile cache |
 | `ProblemUpdated` | Notifications (helpers with offers, affected users; batched R-43), map card freshness |
-| `CheckInDue` (reminder / overdue / final warning) | Notifications (asker, with one-tap actions) |
-| `ProblemAbandoned` | Karma (penalty K-12/K-13), Notifications (asker + helpers), steward handover (R-56), Location purge scheduler |
-| `StewardInvited` / `StewardAccepted` | Notifications, Problems (promote "Same here" to a problem) |
+| `ResponseDue` (24 h reminder / 44 h last call) | Notifications (raiser, with one-tap actions) |
+| `RaiserPenalized` | Karma (K-12/K-13), Notifications (raiser + helpers) |
+| `ProblemAbandoned` | Notifications (raiser + helpers), Location purge scheduler |
 | `ProblemExpired` / `ProblemWithdrawn` | Notifications (helpers with offers), Location purge scheduler |
 | `MessageSent` | Notifications (if recipient not active in that chat) |
 | `ContentReported` | Moderation queue, auto-hide check (S-05) |

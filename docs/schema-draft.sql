@@ -176,12 +176,14 @@ CREATE TABLE app.problems (
   center_lat      double precision NOT NULL,
   center_lng      double precision NOT NULL,
   launch_area_id  text NOT NULL REFERENCES app.launch_areas(id),
-  check_in_due_at  timestamptz NOT NULL,                 -- R-50: reset by every check-in (R-51)
-  check_in_stage   smallint NOT NULL DEFAULT 0            -- R-53/R-54: 0 live, 1 reminded,
-                     CHECK (check_in_stage BETWEEN 0 AND 2), --   2 overdue (in grace)
-  last_check_in_at timestamptz NOT NULL DEFAULT now(),
-  max_life_at      timestamptz NOT NULL,                  -- R-52: expiry without penalty
-  promoted_from_user_id uuid REFERENCES app.users(id),   -- R-56: steward's promoted "same here"
+  -- Raiser response rule (§4.7) — personal problems only
+  response_due_at  timestamptz,                           -- R-52: null until the first help offer
+  reminder_stage   smallint NOT NULL DEFAULT 0            -- R-54: 0 none, 1 = 24 h sent,
+                     CHECK (reminder_stage BETWEEN 0 AND 2), --   2 = 44 h sent; reset on response
+  last_raiser_response_at timestamptz,                    -- R-53
+  last_activity_at timestamptz NOT NULL DEFAULT now(),    -- R-56: raiser response or helper update
+  penalized_at     timestamptz,                           -- R-55: at most once per problem
+  max_life_at      timestamptz NOT NULL,                  -- R-57: expiry without penalty
   solved_at       timestamptz,
   solved_via      text CHECK (solved_via IN ('asker', 'fixed_quorum')),   -- R-20/R-21
   credit_deadline timestamptz,                           -- R-22
@@ -189,13 +191,17 @@ CREATE TABLE app.problems (
   created_at      timestamptz NOT NULL DEFAULT now(),
 
   CHECK (area_res <> 9 OR kind = 'issue'),               -- L-02
+  CHECK (kind = 'request' OR (response_due_at IS NULL AND penalized_at IS NULL)), -- R-50, R-58
   CHECK ((area_res = 7) = (cell_r8 IS NULL)),
   CHECK (status <> 'solved' OR (solved_at IS NOT NULL AND solved_via IS NOT NULL)),
   CHECK ((status = 'open') = (closed_at IS NULL))
 );
 CREATE INDEX problems_incident_idx ON app.problems (incident_id);
 CREATE INDEX problems_owner_idx ON app.problems (owner_id, created_at DESC);
-CREATE INDEX problems_check_in_idx ON app.problems (check_in_due_at) WHERE status = 'open';
+CREATE INDEX problems_response_due_idx ON app.problems (response_due_at)
+  WHERE status = 'open' AND response_due_at IS NOT NULL;
+CREATE INDEX problems_inactivity_idx ON app.problems (last_activity_at)
+  WHERE status = 'open' AND response_due_at IS NOT NULL;
 CREATE INDEX problems_max_life_idx ON app.problems (max_life_at) WHERE status = 'open';
 
 CREATE TABLE app.problem_private_locations (            -- L-03: never joined by public reads
@@ -240,18 +246,6 @@ CREATE TABLE app.incident_affected (                    -- "Same here" (R-30, R-
   PRIMARY KEY (incident_id, user_id)
 );
 CREATE INDEX incident_affected_user_idx ON app.incident_affected (user_id);
-
-CREATE TABLE app.steward_invites (                      -- R-56: issue steward handover
-  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  incident_id      uuid NOT NULL REFERENCES app.incidents(id),
-  from_problem_id  uuid NOT NULL REFERENCES app.problems(id),   -- the abandoned problem
-  invitee_id       uuid NOT NULL REFERENCES app.users(id),
-  status           text NOT NULL DEFAULT 'pending'
-                     CHECK (status IN ('pending', 'accepted', 'declined', 'lapsed')),
-  expires_at       timestamptz NOT NULL,
-  created_at       timestamptz NOT NULL DEFAULT now()
-);
-CREATE UNIQUE INDEX steward_one_pending_idx ON app.steward_invites (incident_id) WHERE status = 'pending';
 
 CREATE TABLE app.incident_merges (                      -- R-34 (later): audit / undo
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -298,7 +292,7 @@ CREATE TABLE app.karma_entries (
                       'pair_cooldown',       -- K-05 (amount 0)
                       'pair_cap',            -- K-06 (amount 0)
                       'ineligible_account',  -- K-07 (amount 0)
-                      'abandonment_penalty', -- K-12/K-13 (amount < 0, system-issued)
+                      'abandonment_penalty', -- K-12/K-13: ignored helpers (amount < 0, system)
                       'reversal'             -- K-08
                     )),
   problem_id        uuid REFERENCES app.problems(id),

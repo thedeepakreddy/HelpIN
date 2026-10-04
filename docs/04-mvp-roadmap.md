@@ -17,7 +17,7 @@
 | Photos: just "upload" | One media pipeline with **EXIF/GPS stripping** | Photos otherwise leak exact locations. |
 | No launch strategy | Phase 7: one launch area, founding helpers, liquidity gate | Hyperlocal apps live or die on local density. |
 | Problem details fixed after posting | **Progress updates** timeline on every problem tab (Phase 2) | Helpers need to know what is still needed *now*. |
-| Problems stay until closed | **Check-in rule:** asker must keep updating; silence → removed + karma penalty (Phase 4) | Keeps the map live and fixes the "never confirmed" problem. |
+| Problems stay until closed | **Response rule** (personal problems): once help starts, the raiser must respond within 2 days or lose karma; removed if nobody is active. Community problems exempt. (Phase 4) | Keeps the map live, respects helpers' time, and fixes the "never confirmed" problem. |
 | A short category list | **Any problem:** People, Environment (garbage, rivers, ponds, parks…), Roads, Utilities, Safety, Other | Matches what people actually need to post. |
 
 ---
@@ -88,9 +88,9 @@ notifications + in-app notification inbox; report/block for offers and messages.
 ### Phase 4 — Liquidity, accountability & issues · M
 
 **Scope:** nearby fan-out (rings, categories, daily caps, quiet hours, ranking, second wave);
-**asker check-in rule** (deadlines per kind/urgency, reminders at 75% and deadline, grace
-period with final warning, auto-abandon, −5/−10 karma penalties, `on_notice` limit, reliability %,
-issue steward handover); one-tap "Still need help" / "It's solved" / "Withdraw" from the
+**raiser response rule** for personal problems (48 h clock from the first help offer, reminders
+at 24 h and 44 h, −5/−10 karma penalties, `on_notice` limit, removal when nobody is active for 48 h,
+helper updates keep the tab alive, reliability %); one-tap "Still need help" / "It's solved" / "Withdraw" from the
 notification; helper update notifications (batched); issue kind: updates, "Fixed now" quorum (R-21), credit-after-solve (R-22); honest empty states;
 list-view toggle on the map.
 
@@ -98,10 +98,15 @@ list-view toggle on the map.
 - A new problem pushes to eligible nearby users within 60 s (p95) and never to blocked users,
   the asker, or users over cap (tests).
 - An issue with 3 "Fixed now" confirmations auto-solves (R-21).
-- Time-travel tests for the full check-in cycle: reminder → deadline → grace → `abandoned` +
-  penalty; any check-in at any step resets the clock; withdraw never penalises; reaching max
-  lifetime expires without penalty (R-50…R-57, K-12…K-14).
-- Escalation: the 3rd abandonment in 30 days puts the user on notice (1 problem/day for 14 days).
+- Time-travel tests for the response rule (R-50…R-60, K-12…K-15):
+  - no help offer → no clock and no penalty, ever;
+  - first offer → reminders at 24 h and 44 h → penalty at 48 h, once per problem;
+  - any raiser response (accept, decline, chat reply, update, Still need help) resets the clock;
+  - raiser silent but a helper posts updates → penalty applied, but the problem stays on the map;
+  - nobody active for 48 h → `abandoned` and removed;
+  - community problems never get a clock, a penalty, or removal for silence;
+  - withdrawing never penalises; reaching max lifetime expires without penalty.
+- Escalation: the 3rd penalty in 30 days puts the user on notice (1 problem/day for 14 days).
 - The confirm-solved prompt can be completed from the notification without opening the full app flow.
 
 > **Core MVP complete.** The full loop works and is testable. A closed beta (Phase 7 step 1) can
@@ -190,7 +195,7 @@ flowchart LR
 | 18 | Serious urgency shows the "not an emergency service, call 112" interstitial ⚑ | 2 |
 | 19 | Users can delete their account in-app | 1 |
 | 20 | The asker can post progress updates (status, text, photos) that helpers see pinned on the problem tab | 2 |
-| 21 | A problem whose asker stops updating is removed automatically and the asker loses karma, after reminders and a grace period | 4 |
+| 21 | Once help starts on a personal problem, a raiser who doesn't respond for 2 days loses karma (after reminders), and a problem nobody updates for 2 days is removed. Community problems are never penalised. | 4 |
 | 22 | Any kind of local problem can be posted: people, environment (dirty areas, rivers, ponds, parks), roads, utilities, safety, other | 2 |
 
 ---

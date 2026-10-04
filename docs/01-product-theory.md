@@ -34,7 +34,7 @@ HelpIN is a **status system**. Every problem has:
 | Closure | Lost in scroll | Owner confirms; pin disappears |
 | Credit | "Thanks 🙏" | Karma + solver history, permanently attributed |
 | Duplicates | 15 messages about the same outage | 1 incident with "15 affected" |
-| Freshness | Old messages look as current as new ones | The asker must keep the problem updated; stale problems disappear |
+| Freshness | Old messages look as current as new ones | Raisers must answer helpers within 2 days; abandoned problems disappear |
 | Reach | Only members of that group | Everyone nearby, including people not in the group |
 
 **Closure is the product.** The map and the karma exist to make closure visible.
@@ -158,19 +158,22 @@ that true:
 1. **Progress updates.** The asker posts updates on the problem's tab ("Got one person, need one
    more after 6 pm"; "Need has changed: now need a plumber, not tools"). Helpers can see exactly
    what is still needed before they offer, so less help is wasted and more problems get solved.
-2. **Accountability.** The asker must check in regularly (post an update, or tap "Still need
-   help"). If they go silent past the deadline and a grace period, the problem is removed and
-   **they lose karma**. Without this, the map fills with ghosts: problems already solved, or no
-   longer needed, that helpers waste time on until they stop trusting the app.
+2. **Accountability.** Once neighbours start helping a **personal** problem, the raiser owes them
+   a response. If the raiser stays silent for **2 days** after help started, they **lose karma**.
+   If nobody (raiser or helpers) updates the problem for 2 days, it's also removed from the map.
+   Without this, the map fills with ghosts: problems already solved, or no longer needed, that
+   helpers waste time on until they stop trusting the app.
 
 The rule is designed to be **fair**:
+- **No help, no clock.** Nobody is penalised before anyone has offered to help.
 - **Silence is penalised, honesty never is.** Withdrawing ("no longer needed") is always free.
-- Reminders come before any penalty, and each has one-tap answers: *Still need help* ·
-  *It's solved* · *Withdraw*.
-- Intervals match the problem: a serious request needs a check-in every 6 h, a slow civic issue
-  every 7 days.
-- For shared issues, if the reporter disappears but neighbours are still affected, one of them can
-  take over as **steward** instead of the issue vanishing.
+- Reminders at 24 h and 44 h come before any penalty, each with one-tap answers: *Still need help*
+  · *It's solved* · *Withdraw*. Replying to a helper in chat also counts.
+- **Helpers keep it alive.** If helpers keep posting updates, the problem stays on the map even
+  while the raiser is quiet. The raiser still loses karma for ignoring them.
+- **Community problems carry no penalties.** Nobody should be punished for reporting a polluted
+  pond or a broken road. Those stay open until fixed (raiser confirms, or 3 affected neighbours
+  confirm "Fixed now"), withdrawn, or their maximum lifetime ends.
 
 This also fixes the biggest weakness of the core loop. Askers who got help but never tap
 "Confirm solved" now have a reason to: the reminder offers *It's solved* as the easiest answer.
@@ -196,15 +199,15 @@ Once karma is a target, people optimise for karma instead of help:
 | **Collusion farming** | Two friends post fake problems and confirm each other | Pair cap: the same asker→helper pair earns karma at most once per 7 days, and lifetime karma from one asker is capped. Velocity flags go to moderation. |
 | **Sockpuppets** | One person with 5 accounts | Phone verification required to earn karma; new accounts (< 24 h) can't earn; one account per phone number |
 | **Confirmation pressure** | "Confirm or I won't help next time" | Askers can report a helper; confirmation is private until done; users can never give each other negative karma (so no retaliation loop) |
-| **Ghost problems** | Asker gets help, then disappears without confirming | Check-in rule: silence → problem removed + system karma penalty (−5, escalating). This is the only karma loss besides moderator reversals. |
+| **Ghost problems** | Asker gets help, then disappears without confirming | Response rule (personal problems): 2 days of silence after help started → system karma penalty (−5, escalating); removed if nobody is active. This is the only karma loss besides moderator reversals. |
 | **Credit grabbing** | Helper claims solved when they didn't help | Only the asker chooses who to credit; helpers can only *suggest* |
 | **Low-effort spam** | Offering help on everything | Offering earns nothing; only confirmed outcomes do |
 
 ### What to display publicly
 
 - **Karma points**: the headline number. It can go negative through abandonment penalties.
-- **Reliability**: "Closes the loop: 92%", the share of their own problems the user closed
-  properly. It's the asker-side trust signal.
+- **Reliability**: "Responds to helpers: 92%", how reliably the user answers people who offer
+  help. It's the asker-side trust signal.
 - **"Neighbours helped"**: the count of *unique* people helped. It's much harder to farm than raw
   karma and is the more honest trust signal.
 - **Solver history**: the list of solved problems (category, area, date), not the private details.
@@ -279,8 +282,8 @@ When in doubt, apply these in order:
 7. **Model for clustering on day one, automate it later.** Every problem belongs to an incident
    from the start, so AI grouping later is a background job, not a migration.
 8. **Problems first, feed second.**
-9. **Live or gone.** Every open problem on the map is current. Askers keep it updated or it
-   disappears.
+9. **Help deserves a response.** Once someone offers help, the raiser answers within 2 days.
+   Community problems are exempt.
 
 ---
 
@@ -309,9 +312,9 @@ These are hypotheses for a first launch area. Recalibrate after 4 weeks of real 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Not enough helpers nearby (cold start) | High | Fatal | Atomic launch area, founding helpers, push engine, single-player value for issues |
-| Askers don't confirm, so the loop never closes | High | High | Check-in rule with abandonment penalty; reminders offer one-tap "It's solved"; helper "I think it's solved" nudge |
-| Map fills with stale problems | High | High | Check-in rule (live or gone); "Updated 2 h ago" freshness on every card |
-| Penalty feels unfair, so askers stop posting | Medium | Medium | Withdraw is always free; reminders + grace before any penalty; small first penalty; moderator can void; tune intervals from data |
+| Askers don't confirm, so the loop never closes | High | High | 2-day response rule with penalty; reminders offer one-tap "It's solved"; helper "I think it's solved" nudge |
+| Map fills with stale problems | High | High | Personal problems with no activity for 2 days after help started are removed; "Updated 2 h ago" freshness on every card |
+| Penalty feels unfair, so people stop posting | Medium | Medium | No clock until help starts; withdraw is always free; reminders at 24 h and 44 h; community problems exempt; small first penalty; moderator can void |
 | Feed eats the product | Medium | High | §8 guardrails, ship feed later |
 | Safety incident (stalking/harassment) | Low–Medium | Fatal for trust | Area-only location, no cold DMs, EXIF stripping, block/report from day one, 18+ only |
 | Karma farming | Medium | Medium | §6 mitigations, ledger reversibility |

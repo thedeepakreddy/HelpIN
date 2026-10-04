@@ -26,7 +26,7 @@
 | Addition | Summary | Where |
 |---|---|---|
 | **Progress updates** | The asker posts updates on the problem's tab (status + text + photos) so helpers know exactly what's still needed. The latest update is pinned. | §5, [02 §4.6](02-domain-model.md#46-progress-updates-the-problem-tabs-timeline) |
-| **Stay active or lose it** | The asker must keep the problem updated. If they go silent past the deadline and a grace period, the tab is **automatically removed** and they **get negative karma points**. | §5, [02 §4.7](02-domain-model.md#47-asker-activity-rule-check-ins--abandonment) |
+| **Respond or lose karma** | Once people start helping a **personal** problem, the raiser must respond within **2 days** or **gets negative karma points**. If nobody (raiser or helpers) updates it for 2 days, the tab is **automatically removed**. Helpers' updates keep it alive. **Community problems never get penalties.** | §5, [02 §4.7](02-domain-model.md#47-raiser-response-rule-accountability) |
 | **Any problem can be posted** | People problems, environment (dirty areas, local rivers, lakes, ponds, parks, trees, pollution), roads and public spaces, utilities, safety, and anything else. | §2, [02 §11](02-domain-model.md#11-category-catalogue-any-problem-can-be-posted) |
 
 ---
@@ -83,14 +83,14 @@ Bottom navigation: **Problems | Feed | ⊕ Create | Chat | Profile**. The app al
 ### Problem tab (detail)
 Description, photos, area, urgency, **pinned latest update + progress timeline**, offer count,
 and the buttons **I can help** / **Same here**. The asker also sees offers, **Post update**,
-**Still need help**, their check-in deadline, and **Confirm solved**.
+**Still need help**, a "reply within X h" banner once helpers are waiting, and **Confirm solved**.
 
 ### Chat
 Only between an asker and a helper they accepted, always tied to a problem. Nobody can message a
 stranger cold. Text, photos, and "share exact location" (asker only). Block and report on every chat.
 
 ### Profile
-Karma (can be negative), **neighbours helped**, **reliability** ("Closes the loop: 92%"), badges,
+Karma (can be negative), **neighbours helped**, **reliability** ("Responds to helpers: 92%"), badges,
 and three separate tabs: **Posts** (feed photos) · **Problem photos** (report + update photos) ·
 **Solved history**.
 
@@ -106,7 +106,8 @@ switched off per area.
 ```
 Create → pick group & category → "Is it one of these?" (Same here) → details → area (hexagon)
 → photos → urgency (Serious ⇒ "call 112 first") → appears on map → nearby helpers notified
-→ I can help → asker accepts → chat → asker posts progress updates (check-ins)
+→ I can help (2-day response timer starts for personal problems) → asker accepts → chat
+→ asker and helpers post progress updates
 → helper: "I think it's solved" → asker confirms + credits helpers → Solved → off the map → karma
 ```
 
@@ -117,7 +118,7 @@ Ways a problem ends:
 | ✅ Solved | Asker confirms (or 3 affected confirm for issues) | — (helpers earn karma) |
 | ↩️ Withdrawn | Asker says no longer needed / solved elsewhere | **No**, honesty is free |
 | ⏳ Expired | Maximum lifetime reached while asker stayed active | No |
-| 🚫 Abandoned | Asker stopped updating: deadline + grace missed | **Yes: −5 karma** (escalating) |
+| 🚫 Abandoned | Personal problem: nobody (raiser or helpers) updated it for 2 days after help started | Raiser gets **−5 karma** if they didn't respond (escalating) |
 | 🛑 Removed | Moderator removed it | Per moderation |
 
 → [02 §4 State machines](02-domain-model.md#4-state-machines)
@@ -137,28 +138,33 @@ The asker posts updates on the problem tab so helpers understand what's needed *
 - Helpers who offered get notified (batched, at most every 30 min).
 - On issues, affected neighbours and helpers can post updates too ("Complaint filed, ref #123").
 
-### Stay active or lose it
-The asker must keep their problem live:
+### Respond to your helpers (personal problems only)
 
-| Kind | Basic | Medium | Serious |
-|---|---|---|---|
-| Request: update at least every | 72 h | 24 h | 6 h |
-| Issue: update at least every | 7 days | 3 days | 12 h |
+Once someone offers to help, the raiser owes them a response.
 
-1. **Check-in** = any progress update, the one-tap **"Still need help"**, accepting an offer, or
-   confirming solved. Each check-in resets the clock. Private chat messages don't count, because
-   helpers on the map can't see them.
-2. **Reminder** at 75% of the interval, then at the deadline. Each reminder has one-tap buttons:
-   *Still need help* · *It's solved* · *Withdraw*.
-3. **Grace period** (25% of the interval, 1–24 h) with a final warning: "This will be removed in
-   6 h and you'll lose 5 karma."
-4. Still silent → **tab automatically removed** from the map, helpers told, and the **asker gets
-   −5 karma**.
-5. **Repeat offenders:** 2nd abandonment in 30 days = −10. 3rd = −10 plus a limit of 1 new
-   problem per day for 14 days.
-6. **Fairness:** withdrawing is always free; moderators can void a penalty caused by a system
-   fault; for issues where neighbours are still affected, one of them can take over as
-   **steward** instead of the issue disappearing.
+| | 🙋 Personal problem | 🌳 Community problem |
+|---|---|---|
+| Before anyone offers help | No timer | No timer |
+| After help starts | Raiser must respond at least every **2 days** | No timer |
+| Raiser silent for 2 days | **−5 karma** (repeats: −10) | **Never penalised** |
+| Removed from the map | Only if **nobody** (raiser or helpers) updates it for 2 days | **Never** for silence |
+
+1. **No help, no clock.** The 2-day timer starts when the first helper offers.
+2. **What counts as responding:** accepting or declining an offer, replying in chat, posting a
+   progress update, the one-tap **"Still need help"**, or confirming solved. Each response resets
+   the 2-day timer.
+3. **Reminders** at 24 h ("Ankit is waiting for you") and 44 h ("4 hours left before you lose 5
+   karma"), each with one-tap *Still need help* · *It's solved* · *Withdraw*.
+4. **2 days of silence → −5 karma**, once per problem. Helpers are told the asker hasn't responded.
+5. **Helpers keep it alive.** If helpers keep posting updates, the problem stays on the map even
+   while the raiser is silent (the raiser still loses the karma). If nobody updates for 2 days, the
+   tab is **automatically removed**.
+6. **Repeat offenders:** 2nd penalty in 30 days = −10. 3rd = −10 plus a limit of 1 new problem per
+   day for 14 days.
+7. **Community problems** (polluted pond, broken road, garbage) **never get penalties** and are
+   never removed for silence. They end when the raiser confirms, when 3 affected neighbours
+   confirm "Fixed now", when withdrawn, or at max lifetime (90 days for basic).
+8. **Fairness:** withdrawing is always free; moderators can void a penalty caused by a system fault.
 
 **Why this matters:** it keeps the map trustworthy, protects helpers' time, and solves the biggest
 weakness of the loop. Askers who got help but forgot to confirm now have a reason to, and the
@@ -174,7 +180,7 @@ easiest button on the reminder is *It's solved*.
   (Serious bypasses it), with quiet hours. If there are many candidates, the system picks the
   closest and most active helpers first, then sends a second wave if nobody offers within 20 min.
 - **Loop notifications:** offer received, offer accepted, new message, progress update,
-  "did it get solved?", +karma, check-in reminders and final warning.
+  "did it get solved?", +karma, and "a helper is waiting for you" reminders at 24 h and 44 h.
 
 → [03 §8](03-architecture.md#8-notifications)
 
@@ -187,12 +193,13 @@ easiest button on the reminder is *It's solved*.
 | Asker confirms you helped solve their problem | **+10** (max 3 helpers credited per problem) |
 | Same asker credits you again within 7 days | 0 (still in your history) |
 | Account < 24 h old or phone not verified | 0 (still in your history) |
-| Your problem is abandoned (you stopped updating) | **−5**, then −10 for repeats |
+| You ignore helpers on your personal problem for 2 days | **−5**, then −10 for repeats |
+| Anything on a community problem | Never negative |
 | Moderator reverses fraud / voids an unfair penalty | Compensating entry |
 
 - Only outcomes earn. Offering, posting and commenting earn nothing.
 - Users can never take karma from each other (no retaliation). The only negative karma is the
-  system's abandonment penalty.
+  system penalty for ignoring helpers on personal problems.
 - The profile shows **karma**, **neighbours helped** (unique people) and **reliability** (%).
 - **No money** in the MVP. Paying for favours kills the neighbourly motivation.
 
@@ -255,13 +262,13 @@ loop works.
 | Backend | Node 22 + Fastify **modular monolith** (API process + worker process, one codebase) |
 | Platform | Supabase: Postgres 16, Auth (phone OTP, Google, Apple), Storage, Realtime |
 | Shared code | `contracts` (zod), `domain` (pure rules), `geo` (H3), `config` |
-| Async | Transactional outbox in Postgres; cron for check-in sweeps, reminders, location purge |
+| Async | Transactional outbox in Postgres; cron for response sweeps, reminders, location purge |
 | Push | Expo Push → FCM / APNs |
 | Quality | Vitest (one test per rule ID), real-Postgres integration tests, Maestro end-to-end |
 
 Main data entities: users · profiles · alert_prefs · devices · blocks · media · incidents ·
 problems · problem_private_locations · **problem_updates** · problem_photos · incident_affected ·
-steward_invites · help_offers · karma_entries · conversations · messages · posts · post_media ·
+help_offers · karma_entries · conversations · messages · posts · post_media ·
 comments · reactions · reports · moderation_actions · notifications · outbox_events.
 
 → [03 — Architecture](03-architecture.md), [schema-draft.sql](schema-draft.sql)
@@ -288,7 +295,7 @@ share, notification opt-outs.
 | 1 | Identity: sign-up, profile, home area, alert prefs, block, account deletion |
 | 2 | Problems on the map: all categories, create flow, photos (EXIF stripped), hexagon map, problem tab, **progress updates**, Same here, report |
 | 3 | **Help loop:** I can help, accept, chat, claim solved, confirm + credit, karma, history, push |
-| 4 | Liquidity & accountability: nearby alerts, **check-in rule + abandonment penalty**, steward handover, issue quorum |
+| 4 | Liquidity & accountability: nearby alerts, **2-day response rule + penalty** (personal problems), issue quorum |
 | 5 | Social feed and the separated profile tabs |
 | 6 | Safety & ops: admin console, auto-hide, fraud flags, metrics, load test, store readiness |
 | 7 | Launch in one area |
@@ -315,7 +322,8 @@ A user can:
 13. Post ordinary photos to the feed
 14. See feed photos and problem photos separated on their profile
 15. *(asker)* Post progress updates that helpers see pinned on the tab
-16. *(asker)* Get reminded to check in, and lose the tab + karma if they stay silent
+16. *(asker)* Once helpers offer on a personal problem, get reminded to respond, and lose karma
+    after 2 days of silence. Community problems are never penalised.
 17. Post any kind of local problem: people, environment, roads, utilities, safety, other
 18. Get notified of new problems nearby, within their limits
 19. Never see anyone's exact location unless it's shared with them in chat
@@ -326,5 +334,5 @@ A user can:
 ## 16. Decisions still needed from the founder
 
 Market and first launch area · Android-first or both · phone OTP mandatory? · feed in first beta? ·
-check-in intervals and penalty sizes · steward handover in v1? · and more.
+and more. (Response rule: ✅ decided.)
 → [05 — Decisions §2](05-decisions.md#2-open-questions-for-the-founder)
