@@ -6,7 +6,7 @@ import {
   CircleCheck,
   Clock,
   Ellipsis,
-  Flag,
+  Heart,
   HandHeart,
   Lock,
   MessageCircle,
@@ -29,6 +29,8 @@ import {
   useWithdrawOffer,
 } from '../../api/hooks';
 import { Hexie } from '../../components/domain/Hexies';
+import { Photo } from '../../components/domain/media';
+import { MoreMenu, ReportSheet } from '../../components/domain/SafetySheets';
 import {
   AskerAvatar,
   KindBadge,
@@ -49,14 +51,18 @@ import { tone } from '../../lib/tones';
 import { DEFAULT_VIEW } from './mapStyle';
 import { ConfirmSolvedSheet, OfferSheet, UpdateSheet, WithdrawSheet } from './ProblemSheets';
 
-type SheetName = 'offer' | 'update' | 'solved' | 'withdraw' | null;
+type SheetName = 'offer' | 'update' | 'solved' | 'credit' | 'withdraw' | null;
 
-export function ProblemScreen({ problemId }: { problemId: string }) {
+export function ProblemScreen({ problemId, action }: { problemId: string; action?: 'still' | 'solved' }) {
   const { t } = useTranslation();
   const router = useRouter();
   const query = useProblem(problemId);
-  const [sheet, setSheet] = useState<SheetName>(null);
-  const back = () => (window.history.length > 1 ? router.history.back() : void router.navigate({ to: '/problems', search: { view: 'map' } }));
+  // "It's solved" on a push notification lands here with ?action=solved (sw.ts).
+  const [sheet, setSheet] = useState<SheetName>(action === 'solved' ? 'solved' : null);
+  const back = () =>
+    window.history.length > 1
+      ? router.history.back()
+      : void router.navigate({ to: '/problems', search: { view: 'map' } });
 
   if (query.isPending) {
     return (
@@ -84,22 +90,56 @@ export function ProblemScreen({ problemId }: { problemId: string }) {
 
   const p = query.data;
   const isAsker = p.viewerRole === 'asker';
-  const sheetProps = (name: Exclude<SheetName, null>) => ({ problem: p, open: sheet === name, onOpenChange: (o: boolean) => setSheet(o ? name : null) });
+  const sheetProps = (name: Exclude<SheetName, null>) => ({
+    problem: p,
+    open: sheet === name,
+    onOpenChange: (o: boolean) => setSheet(o ? name : null),
+  });
 
   return (
     <div className="mx-auto min-h-dvh max-w-2xl bg-white pb-28 md:my-6 md:min-h-0 md:overflow-hidden md:rounded-[28px] md:lip-card">
-      <Hero problem={p} onBack={back} onMore={isAsker && p.status === 'open' ? () => setSheet('withdraw') : undefined} />
+      <Hero
+        problem={p}
+        onBack={back}
+        onMore={isAsker && p.status === 'open' ? () => setSheet('withdraw') : undefined}
+      />
 
       <div className="px-5 pt-4">
         {isAsker && p.responseDueAt && <ResponseBanner problem={p} />}
         <Header problem={p} />
         {p.status !== 'open' && <ClosedBanner problem={p} />}
+        {isAsker && p.hidden && p.status === 'open' && (
+          <p className="mt-4 rounded-2xl bg-coral-tint p-3.5 text-[14px] font-semibold text-coral-ink">
+            {t('problem.hiddenNotice')}
+          </p>
+        )}
+        {isAsker && p.creditUntil && (
+          <div className="mt-4 rounded-2xl bg-tram-tint p-4">
+            <p className="text-[15px] font-bold text-tram-ink">{t('problem.creditTitle')}</p>
+            <p className="mt-0.5 text-[13px] text-ink-2">{t('problem.creditBody')}</p>
+            <Button size="sm" variant="tram" className="mt-3" onClick={() => setSheet('credit')}>
+              {t('problem.creditCta')}
+            </Button>
+          </div>
+        )}
+        {isAsker && p.status === 'solved' && !p.creditUntil && (
+          <Link
+            to="/community/new"
+            search={{ kind: 'thank_you', problem: p.id }}
+            className={buttonClass('soft', 'md', true, 'mt-3')}
+          >
+            <Heart size={17} />
+            {t('problem.sayThanks')}
+          </Link>
+        )}
         <LatestUpdate problem={p} />
 
         {isAsker ? <OffersList problem={p} /> : <AskerRow problem={p} />}
 
         <h2 className="mt-6 font-display text-[19px] font-bold">{t('problem.details')}</h2>
-        <p className="mt-1.5 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">{p.description || t('problem.noDescription')}</p>
+        <p className="mt-1.5 text-[15px] leading-relaxed whitespace-pre-line text-ink-2">
+          {p.description || t('problem.noDescription')}
+        </p>
 
         {findCategory(p.categoryId).category.paperworkTips && (
           <div className="mt-4 flex gap-2.5 rounded-2xl bg-tram-tint p-3.5 text-[13px] leading-relaxed text-tram-ink">
@@ -119,7 +159,19 @@ export function ProblemScreen({ problemId }: { problemId: string }) {
 
       <OfferSheet {...sheetProps('offer')} />
       <UpdateSheet {...sheetProps('update')} />
-      {isAsker && <ConfirmSolvedSheet key={p.offers.map((o) => o.id + o.status).join()} {...sheetProps('solved')} />}
+      {isAsker && (
+        <ConfirmSolvedSheet
+          key={p.offers.map((o) => o.id + o.status).join()}
+          {...sheetProps('solved')}
+        />
+      )}
+      {isAsker && p.creditUntil && (
+        <ConfirmSolvedSheet
+          key={`credit-${p.offers.length}`}
+          mode="credit"
+          {...sheetProps('credit')}
+        />
+      )}
       {isAsker && <WithdrawSheet {...sheetProps('withdraw')} />}
     </div>
   );
@@ -127,7 +179,15 @@ export function ProblemScreen({ problemId }: { problemId: string }) {
 
 /* ------------------------------------------------------------------ Sections */
 
-function Hero({ problem: p, onBack, onMore }: { problem: ProblemDetail; onBack: () => void; onMore?: () => void }) {
+function Hero({
+  problem: p,
+  onBack,
+  onMore,
+}: {
+  problem: ProblemDetail;
+  onBack: () => void;
+  onMore?: () => void;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const tn = tone(p.urgency === 'serious' ? 'coral' : categoryTone(p.categoryId));
@@ -144,17 +204,65 @@ function Hero({ problem: p, onBack, onMore }: { problem: ProblemDetail; onBack: 
     }
   }
   return (
-    <div className={cn('relative h-[200px] overflow-hidden', tn.bg)}>
-      <svg className="absolute inset-0 size-full" viewBox="0 0 400 200" preserveAspectRatio="xMidYMid slice" aria-hidden>
-        <polygon points="330,-20 400,20 400,100 330,140 260,100 260,20" fill="#FFFFFF" opacity="0.35" />
-        <polygon points="40,130 80,153 80,199 40,222 0,199 0,153" fill="#FFFFFF" opacity="0.3" />
-        <polygon points="300,150 318,160 318,181 300,191 282,181 282,160" fill="#FFC531" opacity="0.9" />
-      </svg>
-      <div className={cn('absolute inset-0 flex items-center justify-center', tn.fg)}>
-        <span className="hex flex size-24 items-center justify-center bg-white/70">
-          <CategoryIcon categoryId={p.categoryId} size={44} strokeWidth={1.8} />
-        </span>
-      </div>
+    <div
+      className={cn(
+        'relative overflow-hidden',
+        p.photos.length ? 'h-[300px] bg-ink' : 'h-[200px]',
+        !p.photos.length && tn.bg,
+      )}
+    >
+      {p.photos.length > 0 ? (
+        <div
+          className="no-scrollbar flex size-full snap-x snap-mandatory overflow-x-auto"
+          aria-label={t('problem.photos', { count: p.photos.length })}
+        >
+          {p.photos.map((m, i) => (
+            <a
+              key={m.id}
+              href={m.fullUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="size-full shrink-0 snap-center"
+            >
+              <Photo
+                media={m}
+                alt={t('problem.photoAlt', { n: i + 1, title: p.title })}
+                className="size-full"
+              />
+            </a>
+          ))}
+        </div>
+      ) : (
+        <>
+          <svg
+            className="absolute inset-0 size-full"
+            viewBox="0 0 400 200"
+            preserveAspectRatio="xMidYMid slice"
+            aria-hidden
+          >
+            <polygon
+              points="330,-20 400,20 400,100 330,140 260,100 260,20"
+              fill="#FFFFFF"
+              opacity="0.35"
+            />
+            <polygon
+              points="40,130 80,153 80,199 40,222 0,199 0,153"
+              fill="#FFFFFF"
+              opacity="0.3"
+            />
+            <polygon
+              points="300,150 318,160 318,181 300,191 282,181 282,160"
+              fill="#FFC531"
+              opacity="0.9"
+            />
+          </svg>
+          <div className={cn('absolute inset-0 flex items-center justify-center', tn.fg)}>
+            <span className="hex flex size-24 items-center justify-center bg-white/70">
+              <CategoryIcon categoryId={p.categoryId} size={44} strokeWidth={1.8} />
+            </span>
+          </div>
+        </>
+      )}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between p-3 pt-[max(12px,env(safe-area-inset-top))]">
         <IconButton label={t('common.back')} tone="surface" onClick={onBack}>
           <ArrowLeft size={21} />
@@ -163,15 +271,27 @@ function Hero({ problem: p, onBack, onMore }: { problem: ProblemDetail; onBack: 
           <IconButton label={t('problem.share')} tone="surface" onClick={() => void share()}>
             <Share2 size={19} />
           </IconButton>
-          <IconButton label={onMore ? t('problem.withdraw') : t('problem.report')} tone="surface" onClick={onMore ?? (() => toast(t('problem.reported')))}>
-            {onMore ? <Ellipsis size={20} /> : <Flag size={19} />}
-          </IconButton>
+          {onMore ? (
+            <IconButton label={t('problem.withdraw')} tone="surface" onClick={onMore}>
+              <Ellipsis size={20} />
+            </IconButton>
+          ) : p.viewerRole !== 'asker' ? (
+            <MoreMenu
+              tone="surface"
+              targetType="problem"
+              targetId={p.id}
+              block={{
+                problemId: p.id,
+                name: p.asker.anonymous ? t('problem.anonymous') : p.asker.user.displayName,
+              }}
+            />
+          ) : null}
         </div>
       </div>
-      {p.photoCount > 0 && (
-        <span className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-full bg-ink/75 px-2.5 py-1 text-[12px] font-bold text-white">
+      {p.photos.length > 1 && (
+        <span className="pointer-events-none absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-full bg-ink/75 px-2.5 py-1 text-[12px] font-bold text-white">
           <Camera size={14} />
-          {t('problem.photos', { count: p.photoCount })}
+          {t('problem.photos', { count: p.photos.length })}
         </span>
       )}
     </div>
@@ -187,7 +307,9 @@ function Header({ problem: p }: { problem: ProblemDetail }) {
       <p className="text-[12px] font-extrabold tracking-[0.05em] text-muted uppercase">
         {group.label} · {category.label}
       </p>
-      <h1 className="mt-1.5 font-display text-[26px] leading-[1.15] font-extrabold tracking-tight text-balance">{p.title}</h1>
+      <h1 className="mt-1.5 font-display text-[26px] leading-[1.15] font-extrabold tracking-tight text-balance">
+        {p.title}
+      </h1>
       <div className="mt-3 flex flex-wrap gap-1.5">
         <UrgencyBadge urgency={p.urgency} />
         {p.languageNeeded && <LanguageBadge need={p.languageNeeded} />}
@@ -196,10 +318,14 @@ function Header({ problem: p }: { problem: ProblemDetail }) {
         {p.status !== 'open' && <StatusBadge status={p.status} />}
       </div>
       <p className="mt-3 text-[13px] text-ink-2">
-        {t('problem.near', { place: p.area.locality, district: p.area.district })} · {distance}
+        {p.area.locality && !p.area.locality.includes(p.area.district)
+          ? t('problem.near', { place: p.area.locality, district: p.area.district })
+          : t('problem.inDistrict', { district: p.area.district })}{' '}
+        · {distance}
       </p>
       <p className="mt-0.5 text-[13px] text-ink-2">
-        {t('problem.posted', { when: relativeTime(p.createdAt) })} · <strong>{t('problem.updated', { when: relativeTime(p.lastActivityAt) })}</strong>
+        {t('problem.posted', { when: relativeTime(p.createdAt) })} ·{' '}
+        <strong>{t('problem.updated', { when: relativeTime(p.lastActivityAt) })}</strong>
       </p>
     </>
   );
@@ -215,11 +341,19 @@ function AskerRow({ problem: p }: { problem: ProblemDetail }) {
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-1.5 text-[15px] font-bold">
           {a.anonymous ? t('problem.anonymous') : a.user.displayName}
-          {!a.anonymous && a.user.isNewcomer && <Chip tone="tram" size="xs">{t('problem.newcomer')}</Chip>}
+          {!a.anonymous && a.user.isNewcomer && (
+            <Chip tone="tram" size="xs">
+              {t('problem.newcomer')}
+            </Chip>
+          )}
         </p>
         <p className="mt-0.5 truncate text-[13px] text-ink-2">
-          {!a.anonymous && t('problem.speaks', { languages: a.user.languages.map(languageName).join(', ') }) + ' · '}
-          {reliability === null ? t('problem.newAsker') : t('problem.reliability', { pct: Math.round(reliability * 100) })}
+          {!a.anonymous &&
+            t('problem.speaks', { languages: a.user.languages.map(languageName).join(', ') }) +
+              ' · '}
+          {reliability === null
+            ? t('problem.newAsker')
+            : t('problem.reliability', { pct: Math.round(reliability * 100) })}
         </p>
       </div>
     </div>
@@ -239,7 +373,9 @@ function ResponseBanner({ problem: p }: { problem: ProblemDetail }) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[15px] font-bold text-amber-ink">
-          {waiting ? t('response.waiting', { name: waiting.helper.displayName.split(' ')[0] }) : t('response.title')}
+          {waiting
+            ? t('response.waiting', { name: waiting.helper.displayName.split(' ')[0] })
+            : t('response.title')}
         </p>
         <p className="mt-0.5 text-[13px] leading-relaxed text-ink-2">
           {t('response.body', { hours: left })}
@@ -267,8 +403,17 @@ function ClosedBanner({ problem: p }: { problem: ProblemDetail }) {
   const { t } = useTranslation();
   const solved = p.status === 'solved';
   return (
-    <div className={cn('mt-4 flex items-center gap-3 rounded-2xl p-3.5', solved ? 'bg-brand text-white' : 'bg-paper text-ink-2')}>
-      {solved ? <CircleCheck size={22} className="shrink-0 text-tram" /> : <Lock size={20} className="shrink-0" />}
+    <div
+      className={cn(
+        'mt-4 flex items-center gap-3 rounded-2xl p-3.5',
+        solved ? 'bg-brand text-white' : 'bg-paper text-ink-2',
+      )}
+    >
+      {solved ? (
+        <CircleCheck size={22} className="shrink-0 text-tram" />
+      ) : (
+        <Lock size={20} className="shrink-0" />
+      )}
       <p className="text-[14px] font-semibold">
         {solved
           ? p.creditedHelperNames.length
@@ -303,7 +448,9 @@ function OffersList({ problem: p }: { problem: ProblemDetail }) {
   return (
     <section className="mt-6">
       <div className="flex items-baseline justify-between">
-        <h2 className="font-display text-[19px] font-bold">{t('offers.title', { count: p.offers.length })}</h2>
+        <h2 className="font-display text-[19px] font-bold">
+          {t('offers.title', { count: p.offers.length })}
+        </h2>
         <span className="text-[12px] font-semibold text-muted">{t('offers.hint')}</span>
       </div>
       {p.offers.length === 0 ? (
@@ -332,17 +479,22 @@ function OfferCard({ offer: o, open }: { offer: Offer; open: boolean }) {
   return (
     <Card className={cn('p-3.5', accepted && 'ring-2 ring-brand')}>
       <div className="flex items-center gap-3">
-        <HexAvatar initials={o.helper.initials} color={o.helper.color} size={42} />
+        <HexAvatar initials={o.helper.initials} color={o.helper.color} photo={o.helper.avatar} size={42} />
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-1.5 text-[15px] font-bold">
-            {o.helper.displayName}
-            {o.sharesLanguage && <Chip tone="sapphire" size="xs">{t('offers.sharesLanguage')}</Chip>}
-          </p>
+          <p className="truncate text-[15px] font-bold">{o.helper.displayName}</p>
           <p className="truncate text-[12px] text-ink-2">
-            {t('offers.meta', { languages: o.helper.languages.map(languageName).join(', '), count: o.helper.neighboursHelped })} ·{' '}
-            {relativeTime(o.createdAt)}
+            {t('offers.meta', {
+              languages: o.helper.languages.map(languageName).join(', '),
+              count: o.helper.neighboursHelped,
+            })}{' '}
+            · {relativeTime(o.createdAt)}
           </p>
         </div>
+        <MoreMenu
+          targetType="help_offer"
+          targetId={o.id}
+          block={{ userId: o.helper.id, name: o.helper.displayName }}
+        />
         {accepted ? (
           <Chip tone="solidBrand" size="xs">
             {o.claimedSolved ? t('offers.saysSolved') : t('offers.accepted')}
@@ -353,9 +505,18 @@ function OfferCard({ offer: o, open }: { offer: Offer; open: boolean }) {
           </Chip>
         )}
       </div>
+      {o.sharesLanguage && (
+        <Chip tone="sapphire" size="xs" className="mt-2.5">
+          {t('offers.sharesLanguage')}
+        </Chip>
+      )}
       {o.message && <p className="mt-2.5 text-[14px] leading-relaxed text-ink-2">“{o.message}”</p>}
       {accepted && o.conversationId ? (
-        <Link to="/chat/$conversationId" params={{ conversationId: o.conversationId }} className={buttonClass('soft', 'sm', false, 'mt-3')}>
+        <Link
+          to="/chat/$conversationId"
+          params={{ conversationId: o.conversationId }}
+          className={buttonClass('soft', 'sm', false, 'mt-3')}
+        >
           <MessageCircle size={16} />
           {t('offers.openChat')}
         </Link>
@@ -370,7 +531,10 @@ function OfferCard({ offer: o, open }: { offer: Offer; open: boolean }) {
                 accept.mutate(o.id, {
                   onSuccess: (r) => {
                     toast(t('offers.acceptedToast', { name: o.helper.displayName.split(' ')[0] }));
-                    void navigate({ to: '/chat/$conversationId', params: { conversationId: r.conversationId } });
+                    void navigate({
+                      to: '/chat/$conversationId',
+                      params: { conversationId: r.conversationId },
+                    });
                   },
                   onError: (e) => toast(errorMessage(e, t), 'error'),
                 })
@@ -383,7 +547,9 @@ function OfferCard({ offer: o, open }: { offer: Offer; open: boolean }) {
               variant="secondary"
               className="flex-1"
               loading={decline.isPending}
-              onClick={() => decline.mutate(o.id, { onError: (e) => toast(errorMessage(e, t), 'error') })}
+              onClick={() =>
+                decline.mutate(o.id, { onError: (e) => toast(errorMessage(e, t), 'error') })
+              }
             >
               {t('offers.decline')}
             </Button>
@@ -396,18 +562,32 @@ function OfferCard({ offer: o, open }: { offer: Offer; open: boolean }) {
 
 function AreaPreview({ problem: p }: { problem: ProblemDetail }) {
   const { t } = useTranslation();
-  const color = p.urgency === 'serious' ? '#E8452C' : p.urgency === 'medium' ? '#F28C00' : '#2352E0';
+  const color =
+    p.urgency === 'serious' ? '#E8452C' : p.urgency === 'medium' ? '#F28C00' : '#2352E0';
   const sizeKey = p.area.areaRes === 7 ? 'wider' : p.area.areaRes === 9 ? 'exact' : 'standard';
   return (
     <div className="mt-6 overflow-hidden rounded-2xl border border-line">
-      <svg viewBox="0 0 350 110" className="block h-[110px] w-full" preserveAspectRatio="xMidYMid slice" aria-hidden>
+      <svg
+        viewBox="0 0 350 110"
+        className="block h-[110px] w-full"
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden
+      >
         <rect width="350" height="110" fill="#ECEEE6" />
         <path d="M290,0 C280,40 310,80 300,110 L350,110 L350,0 Z" fill="#B9D3E3" />
         <path d="M300,20 L0,100" stroke="#FFFFFF" strokeWidth="9" fill="none" />
         <path d="M140,0 L170,110" stroke="#FFFFFF" strokeWidth="6" fill="none" />
         <path d="M30,0 L60,110" stroke="#F9F9F5" strokeWidth="3" fill="none" />
-        <polygon points="160,18 192,36 192,74 160,92 128,74 128,36" fill={color} fillOpacity="0.18" stroke={color} strokeWidth="2.5" />
-        {p.area.areaRes === 9 && <circle cx="160" cy="55" r="5" fill={color} stroke="#fff" strokeWidth="2" />}
+        <polygon
+          points="160,18 192,36 192,74 160,92 128,74 128,36"
+          fill={color}
+          fillOpacity="0.18"
+          stroke={color}
+          strokeWidth="2.5"
+        />
+        {p.area.areaRes === 9 && (
+          <circle cx="160" cy="55" r="5" fill={color} stroke="#fff" strokeWidth="2" />
+        )}
       </svg>
       <p className="flex items-center gap-2 bg-white px-3.5 py-2.5 text-[13px] text-ink-2">
         <Lock size={14} className="shrink-0 text-brand" />
@@ -444,18 +624,41 @@ function Stats({ problem: p }: { problem: ProblemDetail }) {
 
 function Timeline({ problem: p }: { problem: ProblemDetail }) {
   const { t } = useTranslation();
-  const rows: { key: string; title: ReactNode; body?: string | null; dot: string }[] = [
+  const [reporting, setReporting] = useState<string | null>(null);
+  const rows: {
+    key: string;
+    title: ReactNode;
+    body?: string | null;
+    dot: string;
+    photos: ProblemDetail['photos'];
+    reportable: boolean;
+  }[] = [
     ...p.updates.map((u) => ({
       key: u.id,
       title: (
         <>
-          {relativeTime(u.createdAt)} · {u.authorName} ({t(`roles.${u.authorRole}`)}) · {t(`progress.${u.progressStatus}`)}
+          {relativeTime(u.createdAt)} · {u.authorName} ({t(`roles.${u.authorRole}`)}) ·{' '}
+          {t(`progress.${u.progressStatus}`)}
         </>
       ),
       body: u.body,
-      dot: u.authorRole === 'asker' ? 'bg-brand' : u.authorRole === 'helper' ? 'bg-sapphire' : 'bg-amber',
+      photos: u.photos,
+      dot:
+        u.authorRole === 'asker'
+          ? 'bg-brand'
+          : u.authorRole === 'helper'
+            ? 'bg-sapphire'
+            : 'bg-amber',
+      reportable: !(u.authorRole === 'asker' && p.viewerRole === 'asker'),
     })),
-    { key: 'posted', title: relativeTime(p.createdAt), body: t('problem.postedEvent'), dot: 'bg-line-strong' },
+    {
+      key: 'posted',
+      title: relativeTime(p.createdAt),
+      body: t('problem.postedEvent'),
+      dot: 'bg-line-strong',
+      photos: [],
+      reportable: false,
+    },
   ];
   return (
     <section className="mt-6">
@@ -464,23 +667,60 @@ function Timeline({ problem: p }: { problem: ProblemDetail }) {
         {rows.map((r, i) => (
           <li key={r.key} className="flex gap-3">
             <div className="flex w-3 flex-col items-center">
-              <span className={cn('mt-1.5 size-3 shrink-0 rounded-full ring-4 ring-white', r.dot)} />
+              <span
+                className={cn('mt-1.5 size-3 shrink-0 rounded-full ring-4 ring-white', r.dot)}
+              />
               {i < rows.length - 1 && <span className="w-0.5 flex-1 bg-line" />}
             </div>
-            <div className="pb-4">
+            <div className="min-w-0 flex-1 pb-4">
               <p className="text-[12px] font-semibold text-muted">{r.title}</p>
               {r.body && <p className="mt-0.5 text-[14px] leading-relaxed">{r.body}</p>}
+              {r.photos.length > 0 && (
+                <div className="mt-2 flex gap-2">
+                  {r.photos.map((m) => (
+                    <a key={m.id} href={m.fullUrl} target="_blank" rel="noreferrer">
+                      <Photo
+                        media={m}
+                        size="thumbUrl"
+                        alt={t('problem.updatePhoto')}
+                        className="size-20 rounded-xl"
+                      />
+                    </a>
+                  ))}
+                </div>
+              )}
+              {r.reportable && r.key !== 'posted' && (
+                <button
+                  type="button"
+                  onClick={() => setReporting(r.key)}
+                  className="mt-1 text-[12px] font-semibold text-muted hover:text-coral-ink"
+                >
+                  {t('report.short')}
+                </button>
+              )}
             </div>
           </li>
         ))}
       </ol>
+      <ReportSheet
+        open={!!reporting}
+        onOpenChange={(o) => !o && setReporting(null)}
+        targetType="problem_update"
+        targetId={reporting ?? ''}
+      />
     </section>
   );
 }
 
 /* ------------------------------------------------------------------ Actions */
 
-function ActionBar({ problem: p, onSheet }: { problem: ProblemDetail; onSheet: (s: SheetName) => void }) {
+function ActionBar({
+  problem: p,
+  onSheet,
+}: {
+  problem: ProblemDetail;
+  onSheet: (s: SheetName) => void;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const sameHere = useSameHere(p.id);
@@ -496,10 +736,22 @@ function ActionBar({ problem: p, onSheet }: { problem: ProblemDetail; onSheet: (
     case 'asker':
       content = (
         <>
-          <Button variant="secondary" size="lg" className="flex-1" icon={<PenLine size={18} />} onClick={() => onSheet('update')}>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="flex-1"
+            icon={<PenLine size={18} />}
+            onClick={() => onSheet('update')}
+          >
             {t('actions.postUpdate')}
           </Button>
-          <Button variant="tram" size="lg" className="flex-1" icon={<CircleCheck size={19} />} onClick={() => onSheet('solved')}>
+          <Button
+            variant="tram"
+            size="lg"
+            className="flex-1"
+            icon={<CircleCheck size={19} />}
+            onClick={() => onSheet('solved')}
+          >
             {t('actions.confirmSolved')}
           </Button>
         </>
@@ -510,17 +762,37 @@ function ActionBar({ problem: p, onSheet }: { problem: ProblemDetail; onSheet: (
       content = (
         <>
           {offer.conversationId && (
-            <Link to="/chat/$conversationId" params={{ conversationId: offer.conversationId }} className={buttonClass('secondary', 'lg', false, 'flex-1')}>
+            <Link
+              to="/chat/$conversationId"
+              params={{ conversationId: offer.conversationId }}
+              className={buttonClass('secondary', 'lg', false, 'flex-1')}
+            >
               <MessageCircle size={18} />
               {t('actions.chat')}
             </Link>
           )}
           {offer.claimedSolved ? (
-            <Button size="lg" className="flex-1" variant="soft" icon={<PenLine size={18} />} onClick={() => onSheet('update')}>
+            <Button
+              size="lg"
+              className="flex-1"
+              variant="soft"
+              icon={<PenLine size={18} />}
+              onClick={() => onSheet('update')}
+            >
               {t('actions.postUpdate')}
             </Button>
           ) : (
-            <Button size="lg" className="flex-1" loading={claim.isPending} onClick={() => claim.mutate(offer.id, { onSuccess: () => toast(t('actions.claimedToast')), onError })}>
+            <Button
+              size="lg"
+              className="flex-1"
+              loading={claim.isPending}
+              onClick={() =>
+                claim.mutate(offer.id, {
+                  onSuccess: () => toast(t('actions.claimedToast')),
+                  onError,
+                })
+              }
+            >
               {t('actions.markSolved')}
             </Button>
           )}
@@ -532,7 +804,11 @@ function ActionBar({ problem: p, onSheet }: { problem: ProblemDetail; onSheet: (
       content = (
         <>
           <p className="flex-1 text-[14px] font-semibold text-ink-2">{t('actions.offerPending')}</p>
-          <Button variant="secondary" loading={withdrawOffer.isPending} onClick={() => withdrawOffer.mutate(p.myOffer!.id, { onError })}>
+          <Button
+            variant="secondary"
+            loading={withdrawOffer.isPending}
+            onClick={() => withdrawOffer.mutate(p.myOffer!.id, { onError })}
+          >
             {t('actions.withdrawOffer')}
           </Button>
         </>
@@ -541,14 +817,26 @@ function ActionBar({ problem: p, onSheet }: { problem: ProblemDetail; onSheet: (
     case 'affected':
       content = (
         <>
-          <Button variant="secondary" size="lg" className="flex-1" loading={sameHere.isPending} onClick={() => sameHere.mutate(false, { onError })}>
+          <Button
+            variant="secondary"
+            size="lg"
+            className="flex-1"
+            loading={sameHere.isPending}
+            onClick={() => sameHere.mutate(false, { onError })}
+          >
             {t('actions.notAffected')}
           </Button>
           <Button
             size="lg"
             className="flex-1"
             loading={fixed.isPending}
-            onClick={() => fixed.mutate(undefined, { onSuccess: (d) => toast(d.status === 'solved' ? t('actions.fixedSolved') : t('actions.fixedVoted')), onError })}
+            onClick={() =>
+              fixed.mutate(undefined, {
+                onSuccess: (d) =>
+                  toast(d.status === 'solved' ? t('actions.fixedSolved') : t('actions.fixedVoted')),
+                onError,
+              })
+            }
           >
             {t('actions.fixedNow', { votes: p.fixedVotes, quorum: FIXED_QUORUM })}
           </Button>
@@ -559,10 +847,26 @@ function ActionBar({ problem: p, onSheet }: { problem: ProblemDetail; onSheet: (
       content =
         p.kind === 'issue' ? (
           <>
-            <Button variant="secondary" size="lg" className="flex-1 px-3" loading={sameHere.isPending} onClick={() => sameHere.mutate(true, { onSuccess: () => toast(t('actions.sameHereToast')), onError })}>
+            <Button
+              variant="secondary"
+              size="lg"
+              className="flex-1 px-3"
+              loading={sameHere.isPending}
+              onClick={() =>
+                sameHere.mutate(true, {
+                  onSuccess: () => toast(t('actions.sameHereToast')),
+                  onError,
+                })
+              }
+            >
               {t('actions.sameHere')}
             </Button>
-            <Button size="lg" className="flex-1" icon={<HandHeart size={19} />} onClick={() => onSheet('offer')}>
+            <Button
+              size="lg"
+              className="flex-1"
+              icon={<HandHeart size={19} />}
+              onClick={() => onSheet('offer')}
+            >
               {t('actions.canHelp')}
             </Button>
           </>
@@ -579,4 +883,3 @@ function ActionBar({ problem: p, onSheet }: { problem: ProblemDetail; onSheet: (
     </div>
   );
 }
-

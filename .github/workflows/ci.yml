@@ -11,6 +11,21 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: helpin
+          POSTGRES_PASSWORD: helpin
+          POSTGRES_DB: helpin_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U helpin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://helpin:helpin@localhost:5432/helpin_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -21,5 +36,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
+      - run: pnpm test # domain + contracts + web unit tests, and API integration tests against Postgres
       - run: pnpm build

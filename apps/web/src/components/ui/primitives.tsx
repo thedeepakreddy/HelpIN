@@ -10,12 +10,15 @@ export function HexAvatar({
   size = 44,
   className,
   label,
+  photo,
 }: {
   initials: string;
   color: string;
   size?: number;
   className?: string;
   label?: string;
+  /** A profile photo, cropped into the hexagon; initials show until it loads or if it fails. */
+  photo?: { thumbUrl: string } | null;
 }) {
   const t = tone(color);
   return (
@@ -23,10 +26,20 @@ export function HexAvatar({
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      className={cn('hex inline-flex shrink-0 items-center justify-center font-extrabold', t.bg, t.fg, className)}
+      className={cn('hex relative inline-flex shrink-0 items-center justify-center overflow-hidden font-extrabold', t.bg, t.fg, className)}
       style={{ width: size, height: Math.round(size * 1.1), fontSize: Math.max(11, size * 0.32) }}
     >
       {initials}
+      {photo && (
+        <img
+          src={photo.thumbUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 size-full object-cover"
+          onError={(e) => (e.currentTarget.style.display = 'none')}
+        />
+      )}
     </span>
   );
 }

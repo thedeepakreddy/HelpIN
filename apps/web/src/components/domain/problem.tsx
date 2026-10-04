@@ -201,7 +201,7 @@ export function StatusBadge({ status, size }: { status: string; size?: 'xs' | 's
 
 export function AskerAvatar({ asker, size = 40 }: { asker: Asker; size?: number }) {
   if (asker.anonymous) return <AnonymousAvatar size={size} />;
-  return <HexAvatar initials={asker.user.initials} color={asker.user.color} size={size} />;
+  return <HexAvatar initials={asker.user.initials} color={asker.user.color} photo={asker.user.avatar} size={size} />;
 }
 
 export function askerName(asker: Asker, anonymousLabel: string): string {

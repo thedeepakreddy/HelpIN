@@ -272,6 +272,32 @@
 - **Why:** communities give newcomers an obvious first step and give existing groups a reason to
   move their mutual help onto HelpIn. Thank-you posts make helping visible and social.
 
+### ADR-029 · Self-hosted auth, storage and realtime behind adapters (instead of Supabase services)
+- **Status:** Accepted (supersedes the Supabase Auth / Storage / Realtime parts of Architecture
+  §3, §7, §9 and §12; Postgres stays as planned and can still be Supabase-hosted in Frankfurt)
+- **Decision:** the API owns these three services itself, each behind a small adapter chosen by
+  environment variables:
+  - **Auth:** phone/email one-time codes (hashed, 10-minute expiry, 5 tries, rate-limited per
+    destination and IP) sent through an SMS adapter (`console` in dev, Twilio in production) and
+    an email adapter (`console` / SMTP). The API issues 15-minute HS256 access tokens and 30-day
+    rotating refresh tokens stored hashed in `app.sessions`. Staff need TOTP 2FA (ADR-023);
+    `ADMIN_EMAILS` grants the admin role and is kept out of the repo. `AUTH_DEV_CODE` and the
+    console providers are refused when `NODE_ENV=production`.
+  - **Storage:** an S3-compatible driver (any EU bucket) or a local driver with HMAC-signed
+    links. Uploads always land in `quarantine/`; the worker strips metadata, re-encodes WebP
+    sizes and deletes the original (L-08).
+  - **Realtime:** `pg_notify` inside the same transaction (delivered only on commit), one
+    `LISTEN` connection per API process, and a Server-Sent Events stream (`GET /v1/events`)
+    authenticated with the access token. Clients refetch on events, so a missed event costs
+    freshness, never correctness.
+- **Why:** one codebase that runs anywhere with only Postgres (a laptop, CI, any EU host),
+  integration tests that cover sign-in end to end, no vendor lock-in for identity data, and fewer
+  processors to list in the privacy notice. The adapters keep the door open to swapping in a
+  managed provider later without touching modules.
+- **Cost:** we own OTP abuse protection, token rotation and the SSE connection count. SSE needs
+  one connection per open tab; Architecture §14's scaling notes apply (sticky sessions are not
+  required because every API process listens to Postgres).
+
 ---
 
 ## 2. Open questions for the founder

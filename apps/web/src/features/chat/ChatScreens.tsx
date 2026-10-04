@@ -1,13 +1,17 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ArrowLeft, ArrowUp, ChevronRight, Lock, MapPin, ShieldAlert } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, ArrowUp, ChevronRight, EyeOff, ImagePlus, Loader2, Lock, MapPin, ShieldAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { LIMITS } from '@helpin/config';
 import type { Conversation, Message } from '@helpin/contracts';
-import { useConversation, useConversations, useMe, useSendMessage, useShareLocation } from '../../api/hooks';
+import { api, ApiError } from '../../api';
+import { qk, useConversation, useConversations, useMe, useRevealIdentity, useSendMessage, useShareLocation } from '../../api/hooks';
+import { Photo } from '../../components/domain/media';
+import { MoreMenu } from '../../components/domain/SafetySheets';
 import { Hexie } from '../../components/domain/Hexies';
 import { AskerAvatar, askerName } from '../../components/domain/problem';
-import { buttonClass } from '../../components/ui/Button';
+import { Button, buttonClass } from '../../components/ui/Button';
 import { useToast } from '../../components/ui/Toast';
 import { EmptyState, Skeleton } from '../../components/ui/primitives';
 import { cn } from '../../lib/cn';
@@ -85,17 +89,54 @@ function ConversationRow({ conversation: c }: { conversation: Conversation }) {
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const { t } = useTranslation();
   const toast = useToast();
+  const qc = useQueryClient();
   const me = useMe();
   const query = useConversation(conversationId);
   const send = useSendMessage(conversationId);
   const share = useShareLocation(conversationId);
   const [text, setText] = useState('');
   const bottom = useRef<HTMLDivElement>(null);
+  const reveal = useRevealIdentity(conversationId);
+  const [uploading, setUploading] = useState(false);
   const count = query.data?.messages.length ?? 0;
+  const lastId = query.data?.messages[count - 1]?.id;
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });
   }, [count]);
+
+  // Opening the chat marks it read.
+  useEffect(() => {
+    if (lastId) void api.markConversationRead(conversationId).then(() => qc.invalidateQueries({ queryKey: qk.conversations }));
+  }, [lastId, conversationId, qc]);
+
+  /** L-04: the saved private spot if there is one, otherwise the device's current position. */
+  function shareExact() {
+    const onError = (e: unknown) => toast(errorMessage(e, t), 'error');
+    share.mutate(null, {
+      onSuccess: () => toast(t('chat.locationShared')),
+      onError: (e) => {
+        if (e instanceof ApiError && e.code === 'NO_PRIVATE_LOCATION' && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => share.mutate({ lat: pos.coords.latitude, lng: pos.coords.longitude }, { onSuccess: () => toast(t('chat.locationShared')), onError }),
+            () => toast(t('create.location.noGps'), 'error'),
+          );
+        } else onError(e);
+      },
+    });
+  }
+
+  async function sendPhoto(file: File) {
+    setUploading(true);
+    try {
+      const media = await api.uploadPhoto(file, 'chat_image');
+      await send.mutateAsync({ mediaId: media.id });
+    } catch (e) {
+      toast(errorMessage(e, t), 'error');
+    } finally {
+      setUploading(false);
+    }
+  }
 
   if (query.isPending) return <Skeleton className="m-4 h-40" />;
   if (!query.data) {
@@ -109,7 +150,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     e.preventDefault();
     const body = text.trim();
     if (!body) return;
-    send.mutate(body, { onSuccess: () => setText(''), onError: (err) => toast(errorMessage(err, t), 'error') });
+    send.mutate({ body }, { onSuccess: () => setText(''), onError: (err) => toast(errorMessage(err, t), 'error') });
   }
 
   return (
@@ -124,6 +165,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
             <p className="truncate text-[16px] font-bold">{other}</p>
             <p className="truncate text-[12px] text-ink-2">{c.viewerIsAsker ? t('chat.helper') : t('chat.asker')}</p>
           </div>
+          <MoreMenu targetType={c.other.anonymous ? "problem" : "user"} targetId={c.other.anonymous ? c.problemId : c.other.user.id} block={{ conversationId: c.id, name: other }} />
         </div>
         <Link
           to="/p/$problemId"
@@ -141,6 +183,15 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           <ShieldAlert size={17} className="mt-0.5 shrink-0" />
           {t('chat.safety')}
         </div>
+        {c.viewerIsAsker && c.askerAnonymous && !c.identityRevealed && !c.readOnly && (
+          <div className="mb-3 flex items-center gap-3 rounded-2xl bg-white p-3 lip-card">
+            <EyeOff size={18} className="shrink-0 text-sapphire" />
+            <p className="min-w-0 flex-1 text-[13px] text-ink-2">{t('chat.anonymousHint')}</p>
+            <Button size="sm" variant="secondary" loading={reveal.isPending} onClick={() => reveal.mutate(undefined, { onError: (e) => toast(errorMessage(e, t), 'error') })}>
+              {t('chat.reveal')}
+            </Button>
+          </div>
+        )}
         <div className="flex flex-col gap-2">
           {messages.map((m) => (
             <Bubble key={m.id} message={m} mine={m.senderId === me.data?.id} />
@@ -158,12 +209,17 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
               type="button"
               aria-label={t('chat.shareLocation')}
               title={t('chat.shareLocation')}
-              onClick={() => share.mutate(undefined, { onSuccess: () => toast(t('chat.locationShared')), onError: (e) => toast(errorMessage(e, t), 'error') })}
+              onClick={() => shareExact()}
               className="flex size-11 shrink-0 items-center justify-center rounded-full bg-paper text-ink-2 hover:text-brand"
             >
               <MapPin size={20} />
             </button>
           )}
+          <label className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-paper text-ink-2 hover:text-brand" title={t('chat.sendPhoto')}>
+            {uploading ? <Loader2 size={19} className="animate-spin" /> : <ImagePlus size={20} />}
+            <span className="sr-only">{t('chat.sendPhoto')}</span>
+            <input type="file" accept="image/*" className="sr-only" disabled={uploading} onChange={(e) => e.target.files?.[0] && void sendPhoto(e.target.files[0])} />
+          </label>
           <label className="min-w-0 flex-1">
             <span className="sr-only">{t('chat.message')}</span>
             <input
@@ -192,6 +248,14 @@ function Bubble({ message: m, mine }: { message: Message; mine: boolean }) {
   const { t } = useTranslation();
   if (m.type === 'system') {
     return <p className="self-center rounded-full bg-[#E7EAE2] px-3 py-1.5 text-center text-[12px] font-semibold text-ink-2">{m.body}</p>;
+  }
+  if (m.type === 'image' && m.media) {
+    return (
+      <a href={m.media.fullUrl} target="_blank" rel="noreferrer" className={cn('w-[220px] overflow-hidden rounded-[18px] bg-white lip-card', mine ? 'self-end' : 'self-start')}>
+        <Photo media={m.media} alt={t('chat.photo')} className="h-[220px] w-full" />
+        <span className="block px-3 py-1.5 text-right text-[11px] text-muted">{clockTime(m.createdAt)}</span>
+      </a>
+    );
   }
   if (m.type === 'location' && m.location) {
     const { lat, lng } = m.location;

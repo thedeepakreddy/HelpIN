@@ -1,0 +1,28 @@
+{
+  "name": "@helpin/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "migrate": "tsx src/migrate.ts",
+    "gen:cells": "tsx scripts/gen-budapest-cells.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests",
+    "build": "tsc -p tsconfig.json",
+    "gen:types": "kysely-codegen --dialect postgres --default-schema app --include-pattern 'app.*' --out-file src/schema.ts && node scripts/fix-schema-types.mjs",
+    "reset": "tsx src/reset.ts"
+  },
+  "dependencies": {
+    "h3-js": "^4.5.0",
+    "kysely": "^0.28.17",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
+    "kysely-codegen": "^0.19.0"
+  }
+}

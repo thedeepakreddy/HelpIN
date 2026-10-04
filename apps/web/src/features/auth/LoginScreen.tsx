@@ -1,9 +1,11 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type MouseEvent } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { ArrowLeft, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSession } from '../../api/hooks';
 import { ApiError } from '../../api';
+import { useToast } from '../../components/ui/Toast';
+import { errorMessage } from '../../lib/errors';
 import { Confetti, Hexies, Logo, type HexieMood } from '../../components/domain/Hexies';
 import { Button } from '../../components/ui/Button';
 import { Segmented } from '../../components/ui/primitives';
@@ -19,6 +21,7 @@ export function LoginScreen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const session = useSession();
+  const toast = useToast();
 
   const [mode, setMode] = useState<Mode>('phone');
   const [contact, setContact] = useState('');
@@ -29,6 +32,9 @@ export function LoginScreen() {
   const [error, setError] = useState(false);
   const [attempts, setAttempts] = useState(0);
   const [sentTo, setSentTo] = useState('');
+  const [challengeId, setChallengeId] = useState('');
+  const [devCode, setDevCode] = useState<string | null>(null);
+  const [onboarded, setOnboarded] = useState(false);
 
   const digits = contact.replace(/\D/g, '');
   const valid = mode === 'phone' ? digits.length >= 9 : EMAIL_RE.test(contact.trim());
@@ -56,18 +62,22 @@ export function LoginScreen() {
   else if (valid) bubble = t('login.bubble.looksRight');
   else if (focus === 'contact' || contact.length > 0) bubble = t('login.bubble.watching');
 
-  async function sendCode(e: FormEvent) {
+  async function sendCode(e: FormEvent | MouseEvent) {
     e.preventDefault();
     if (!valid || busy) return;
     setBusy(true);
     try {
-      const full = mode === 'phone' ? `+36${digits}` : contact.trim();
-      const res = await session.requestCode(full);
-      setSentTo(mode === 'phone' ? `+36 ${contact.trim()}` : res.sentTo);
+      const full = mode === 'phone' ? (contact.trim().startsWith('+') ? contact.trim() : `+36${digits}`) : contact.trim();
+      const res = await session.requestCode(mode === 'phone' ? 'sms' : 'email', full);
+      setSentTo(res.sentTo);
+      setChallengeId(res.challengeId);
+      setDevCode(res.devCode ?? null);
       setStep('code');
       setCode('');
       setError(false);
       setAttempts(0);
+    } catch (err) {
+      toast(errorMessage(err, t), 'error');
     } finally {
       setBusy(false);
     }
@@ -78,15 +88,20 @@ export function LoginScreen() {
     if (code.length !== 6 || locked || busy) return;
     setBusy(true);
     try {
-      await session.verifyCode(code);
+      const me = await session.verifyCode(challengeId, code);
+      setOnboarded(me.onboarding.done);
       setStep('success');
       setFocus(null);
     } catch (err) {
-      if (err instanceof ApiError) {
+      if (err instanceof ApiError && err.code === 'CODE_MISMATCH') {
         setError(true);
         setAttempts((a) => a + 1);
         setCode('');
-      } else throw err;
+      } else if (err instanceof ApiError && err.status === 429) {
+        setAttempts(MAX_TRIES);
+      } else {
+        toast(errorMessage(err, t), 'error');
+      }
     } finally {
       setBusy(false);
     }
@@ -221,13 +236,15 @@ export function LoginScreen() {
                   {busy ? t('login.checking') : t('login.verify')}
                 </Button>
                 <div className="mt-3 flex justify-between text-[13px] text-muted">
-                  <span>{t('login.resendIn', { time: '0:24' })}</span>
+                  <button type="button" disabled={busy} onClick={(e) => void sendCode(e)} className="font-bold text-brand disabled:text-muted">
+                    {t('login.resend')}
+                  </button>
                   {locked ? (
                     <button type="button" onClick={startOver} className="font-bold text-brand">
                       {t('login.startOver')}
                     </button>
                   ) : (
-                    <span className="font-semibold">{t('login.demoCode')}</span>
+                    devCode && <span className="font-semibold">{t('login.devCode', { code: devCode })}</span>
                   )}
                 </div>
               </form>
@@ -240,8 +257,8 @@ export function LoginScreen() {
                 </div>
                 <h1 className="mt-3.5 font-display text-[28px] font-extrabold">{t('login.successTitle')}</h1>
                 <p className="mt-1.5 mb-5 text-[15px] text-ink-2">{t('login.successBody')}</p>
-                <Button size="lg" block onClick={() => void navigate({ to: '/problems' })}>
-                  {t('login.letsGo')}
+                <Button size="lg" block onClick={() => void navigate({ to: onboarded ? '/problems' : '/onboarding' })}>
+                  {onboarded ? t('login.letsGo') : t('login.setUp')}
                 </Button>
               </div>
             )}

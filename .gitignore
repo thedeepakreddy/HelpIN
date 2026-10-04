@@ -10,3 +10,5 @@ coverage/
 playwright-report/
 test-results/
 apps/web/dev-dist/
+.data/
+e2e/screenshots/

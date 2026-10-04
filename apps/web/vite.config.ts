@@ -9,6 +9,10 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src/sw',
+      filename: 'sw.ts',
+      injectManifest: { globPatterns: ['**/*.{js,css,html,svg,woff2}'] },
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'HelpIn',
@@ -21,7 +25,6 @@ export default defineConfig({
         start_url: '/',
         icons: [{ src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' }],
       },
-      workbox: { navigateFallback: '/index.html', globPatterns: ['**/*.{js,css,html,svg,woff2}'] },
     }),
   ],
   server: { port: 5173, host: true },

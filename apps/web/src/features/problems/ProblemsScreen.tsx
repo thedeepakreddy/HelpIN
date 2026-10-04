@@ -38,7 +38,7 @@ export function ProblemsScreen({ view }: { view: ProblemsView }) {
 
   const origin = myPosition ?? DEFAULT_VIEW.center;
   const mapData = useMap(viewport?.bbox ?? null, viewport?.zoom ?? DEFAULT_VIEW.zoom);
-  const nearby = useNearby(DEFAULT_VIEW.center);
+  const nearby = useNearby();
 
   const filteredMap = useMemo(() => {
     const d = mapData.data;

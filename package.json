@@ -7,7 +7,13 @@
     "node": ">=22"
   },
   "scripts": {
-    "dev": "pnpm --filter @helpin/web dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "pnpm --filter @helpin/web dev",
+    "dev:api": "pnpm --filter @helpin/api dev",
+    "dev:worker": "pnpm --filter @helpin/api dev:worker",
+    "db:migrate": "pnpm --filter @helpin/api migrate",
+    "db:reset": "pnpm --filter @helpin/api db:reset",
+    "db:seed": "pnpm --filter @helpin/api seed",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
@@ -22,6 +28,7 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
     "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.0",
     "vitest": "^5.0.3"

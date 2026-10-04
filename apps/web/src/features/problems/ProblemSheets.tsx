@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { KARMA, LIMITS, type ProgressStatus } from '@helpin/config';
 import type { Offer, ProblemDetail } from '@helpin/contracts';
 import { UserCheck } from 'lucide-react';
 import { useConfirmSolved, useOfferHelp, usePostUpdate, useWithdrawProblem } from '../../api/hooks';
+import { PhotoGrid, usePhotoUploads } from '../../components/domain/media';
 import { Button } from '../../components/ui/Button';
 import { Sheet } from '../../components/ui/Sheet';
 import { useToast } from '../../components/ui/Toast';
@@ -12,12 +14,22 @@ import { errorMessage } from '../../lib/errors';
 
 /* ------------------------------------------------------------------ Offer help */
 
-export function OfferSheet({ problem, open, onOpenChange }: { problem: ProblemDetail; open: boolean; onOpenChange: (o: boolean) => void }) {
+export function OfferSheet({
+  problem,
+  open,
+  onOpenChange,
+}: {
+  problem: ProblemDetail;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const offer = useOfferHelp(problem.id);
   const [message, setMessage] = useState('');
-  const asker = problem.asker.anonymous ? t('problem.theAsker') : problem.asker.user.displayName.split(' ')[0];
+  const asker = problem.asker.anonymous
+    ? t('problem.theAsker')
+    : problem.asker.user.displayName.split(' ')[0];
 
   async function submit() {
     try {
@@ -59,23 +71,44 @@ export function OfferSheet({ problem, open, onOpenChange }: { problem: ProblemDe
 
 /* ------------------------------------------------------------------ Progress update */
 
-const STATUSES: ProgressStatus[] = ['still_need_help', 'making_progress', 'partly_solved', 'need_changed', 'note'];
+const STATUSES: ProgressStatus[] = [
+  'still_need_help',
+  'making_progress',
+  'partly_solved',
+  'need_changed',
+  'note',
+];
 
-export function UpdateSheet({ problem, open, onOpenChange }: { problem: ProblemDetail; open: boolean; onOpenChange: (o: boolean) => void }) {
+export function UpdateSheet({
+  problem,
+  open,
+  onOpenChange,
+}: {
+  problem: ProblemDetail;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const post = usePostUpdate(problem.id);
   const [status, setStatus] = useState<ProgressStatus>('making_progress');
   const [body, setBody] = useState('');
+  const photos = usePhotoUploads('problem_photo', LIMITS.updatePhotos);
   const needsBody = status === 'need_changed' || status === 'note';
-  const options = problem.viewerRole === 'asker' ? STATUSES : STATUSES.filter((s) => s !== 'need_changed');
+  const options =
+    problem.viewerRole === 'asker' ? STATUSES : STATUSES.filter((s) => s !== 'need_changed');
 
   async function submit() {
     try {
-      await post.mutateAsync({ progressStatus: status, body: body.trim() || null });
+      await post.mutateAsync({
+        progressStatus: status,
+        body: body.trim() || null,
+        mediaIds: photos.mediaIds,
+      });
       toast(t('update.posted'));
       onOpenChange(false);
       setBody('');
+      photos.reset();
     } catch (e) {
       toast(errorMessage(e, t), 'error');
     }
@@ -86,9 +119,17 @@ export function UpdateSheet({ problem, open, onOpenChange }: { problem: ProblemD
       open={open}
       onOpenChange={onOpenChange}
       title={t('update.title')}
-      description={problem.viewerRole === 'asker' ? t('update.subtitleAsker') : t('update.subtitleHelper')}
+      description={
+        problem.viewerRole === 'asker' ? t('update.subtitleAsker') : t('update.subtitleHelper')
+      }
       footer={
-        <Button size="lg" block disabled={needsBody && !body.trim()} loading={post.isPending} onClick={() => void submit()}>
+        <Button
+          size="lg"
+          block
+          disabled={(needsBody && !body.trim()) || photos.uploading}
+          loading={post.isPending}
+          onClick={() => void submit()}
+        >
           {t('update.post')}
         </Button>
       }
@@ -119,31 +160,64 @@ export function UpdateSheet({ problem, open, onOpenChange }: { problem: ProblemD
         maxLength={LIMITS.update}
         onChange={(e) => setBody(e.target.value)}
       />
+      <p className="mt-4 mb-2 text-[13px] font-bold">{t('update.photos')}</p>
+      <PhotoGrid uploads={photos} columns={4} />
     </Sheet>
   );
 }
 
 /* ------------------------------------------------------------------ Confirm solved */
 
-export function ConfirmSolvedSheet({ problem, open, onOpenChange }: { problem: ProblemDetail; open: boolean; onOpenChange: (o: boolean) => void }) {
+export function ConfirmSolvedSheet({
+  problem,
+  open,
+  onOpenChange,
+  mode = 'confirm',
+}: {
+  problem: ProblemDetail;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  mode?: 'confirm' | 'credit';
+}) {
   const { t } = useTranslation();
   const toast = useToast();
-  const confirm = useConfirmSolved(problem.id);
-  const candidates = problem.offers.filter((o) => o.status === 'accepted' || o.status === 'offered');
-  const [picked, setPicked] = useState<string[]>(() => candidates.filter((o) => o.status === 'accepted').slice(0, KARMA.maxCreditedHelpers).map((o) => o.id));
-  const [nobody, setNobody] = useState(candidates.length === 0);
+  const navigate = useNavigate();
+  const confirm = useConfirmSolved(problem.id, mode);
+  const candidates = problem.offers.filter((o) =>
+    mode === 'credit'
+      ? o.status === 'closed' || o.status === 'accepted'
+      : o.status === 'accepted' || o.status === 'offered',
+  );
+  const credit = mode === 'credit';
+  const [picked, setPicked] = useState<string[]>(() =>
+    candidates
+      .filter((o) => o.status === 'accepted')
+      .slice(0, KARMA.maxCreditedHelpers)
+      .map((o) => o.id),
+  );
+  const [nobody, setNobody] = useState(!credit && candidates.length === 0);
   const full = picked.length >= KARMA.maxCreditedHelpers;
 
   function toggle(o: Offer) {
     setNobody(false);
-    setPicked((list) => (list.includes(o.id) ? list.filter((x) => x !== o.id) : full ? list : [...list, o.id]));
+    setPicked((list) =>
+      list.includes(o.id) ? list.filter((x) => x !== o.id) : full ? list : [...list, o.id],
+    );
   }
 
   async function submit() {
     try {
       const res = await confirm.mutateAsync(nobody ? [] : picked);
-      toast(res.askerAward > 0 ? t('solved.toastWithAward', { count: res.credited, award: res.askerAward }) : t('solved.toast'), 'karma');
+      toast(
+        res.askerAward > 0
+          ? t('solved.toastWithAward', { count: res.credited, award: res.askerAward })
+          : t('solved.toast'),
+        'karma',
+      );
       onOpenChange(false);
+      // F-06: invite the asker to say thanks publicly.
+      if (res.credited > 0)
+        void navigate({ to: '/community/new', search: { kind: 'thank_you', problem: problem.id } });
     } catch (e) {
       toast(errorMessage(e, t), 'error');
     }
@@ -152,18 +226,33 @@ export function ConfirmSolvedSheet({ problem, open, onOpenChange }: { problem: P
   const canConfirm = nobody || picked.length > 0;
   const karmaLine = nobody
     ? t('solved.karmaNobody')
-    : t('solved.karmaLine', { count: picked.length, award: KARMA.solveAward, closing: KARMA.closingAward });
+    : t('solved.karmaLine', {
+        count: picked.length,
+        award: KARMA.solveAward,
+        closing: KARMA.closingAward,
+      });
 
   return (
     <Sheet
       open={open}
       onOpenChange={onOpenChange}
-      title={t('solved.title')}
+      title={credit ? t('solved.creditTitle') : t('solved.title')}
       description={t('solved.subtitle', { max: KARMA.maxCreditedHelpers })}
       footer={
         <div className="flex flex-col gap-2">
-          <Button size="lg" variant="tram" block disabled={!canConfirm} loading={confirm.isPending} onClick={() => void submit()}>
-            {canConfirm ? (nobody ? t('solved.confirmNobody') : t('solved.confirm', { count: picked.length })) : t('solved.choose')}
+          <Button
+            size="lg"
+            variant="tram"
+            block
+            disabled={!canConfirm}
+            loading={confirm.isPending}
+            onClick={() => void submit()}
+          >
+            {canConfirm
+              ? nobody
+                ? t('solved.confirmNobody')
+                : t('solved.confirm', { count: picked.length })
+              : t('solved.choose')}
           </Button>
           <Button variant="ghost" block onClick={() => onOpenChange(false)}>
             {t('solved.notYet')}
@@ -179,28 +268,38 @@ export function ConfirmSolvedSheet({ problem, open, onOpenChange }: { problem: P
             selected={!nobody && picked.includes(o.id)}
             disabled={!picked.includes(o.id) && full}
             onSelect={() => toggle(o)}
-            icon={<HexAvatar initials={o.helper.initials} color={o.helper.color} size={40} />}
+            icon={<HexAvatar initials={o.helper.initials} color={o.helper.color} photo={o.helper.avatar} size={40} />}
             title={o.helper.displayName}
-            description={o.claimedSolved ? t('solved.saysSolved') : o.status === 'accepted' ? t('solved.accepted') : t('solved.offered')}
+            description={
+              o.claimedSolved
+                ? t('solved.saysSolved')
+                : o.status === 'accepted'
+                  ? t('solved.accepted')
+                  : t('solved.offered')
+            }
           />
         ))}
-        <ChoiceCard
-          type="checkbox"
-          selected={nobody}
-          onSelect={() => {
-            setNobody((n) => !n);
-            setPicked([]);
-          }}
-          icon={
-            <HexTile color="tram" size={40}>
-              <UserCheck size={19} />
-            </HexTile>
-          }
-          title={t('solved.nobody')}
-          description={t('solved.nobodyHint')}
-        />
+        {!credit && (
+          <ChoiceCard
+            type="checkbox"
+            selected={nobody}
+            onSelect={() => {
+              setNobody((n) => !n);
+              setPicked([]);
+            }}
+            icon={
+              <HexTile color="tram" size={40}>
+                <UserCheck size={19} />
+              </HexTile>
+            }
+            title={t('solved.nobody')}
+            description={t('solved.nobodyHint')}
+          />
+        )}
       </div>
-      <p className="mt-4 rounded-2xl bg-brand-tint px-4 py-3 text-[13px] font-semibold text-brand-ink">{karmaLine}</p>
+      <p className="mt-4 rounded-2xl bg-brand-tint px-4 py-3 text-[13px] font-semibold text-brand-ink">
+        {karmaLine}
+      </p>
     </Sheet>
   );
 }
@@ -209,7 +308,15 @@ export function ConfirmSolvedSheet({ problem, open, onOpenChange }: { problem: P
 
 const REASONS = ['solved_elsewhere', 'no_longer_needed', 'posted_by_mistake', 'other'] as const;
 
-export function WithdrawSheet({ problem, open, onOpenChange }: { problem: ProblemDetail; open: boolean; onOpenChange: (o: boolean) => void }) {
+export function WithdrawSheet({
+  problem,
+  open,
+  onOpenChange,
+}: {
+  problem: ProblemDetail;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+}) {
   const { t } = useTranslation();
   const toast = useToast();
   const withdraw = useWithdrawProblem(problem.id);
@@ -232,14 +339,25 @@ export function WithdrawSheet({ problem, open, onOpenChange }: { problem: Proble
       title={t('withdraw.title')}
       description={t('withdraw.subtitle')}
       footer={
-        <Button size="lg" variant="danger" block loading={withdraw.isPending} onClick={() => void submit()}>
+        <Button
+          size="lg"
+          variant="danger"
+          block
+          loading={withdraw.isPending}
+          onClick={() => void submit()}
+        >
           {t('withdraw.confirm')}
         </Button>
       }
     >
       <div className="flex flex-col gap-2.5">
         {REASONS.map((r) => (
-          <ChoiceCard key={r} selected={reason === r} onSelect={() => setReason(r)} title={t(`withdraw.reasons.${r}`)} />
+          <ChoiceCard
+            key={r}
+            selected={reason === r}
+            onSelect={() => setReason(r)}
+            title={t(`withdraw.reasons.${r}`)}
+          />
         ))}
       </div>
     </Sheet>

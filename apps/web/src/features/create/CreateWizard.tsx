@@ -1,6 +1,7 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { ArrowLeft, Camera, EyeOff, ImagePlus, LocateFixed, Phone, ShieldAlert, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Camera, EyeOff, LocateFixed, Phone, ShieldAlert, X } from 'lucide-react';
+import { latLngToCell } from 'h3-js';
 import { useTranslation } from 'react-i18next';
 import {
   CATEGORY_GROUPS,
@@ -16,6 +17,7 @@ import type { ProblemCard } from '@helpin/contracts';
 import { allowedPrecisions, type LatLng } from '@helpin/geo';
 import { useCreateProblem, useMe, useSameHere, useSimilar } from '../../api/hooks';
 import { CategoryHex, GROUP_TONE, LanguageBadge, UrgencyBadge, categoryIcon } from '../../components/domain/problem';
+import { PhotoGrid, usePhotoUploads } from '../../components/domain/media';
 import { Button, IconButton } from '../../components/ui/Button';
 import { useToast } from '../../components/ui/Toast';
 import { ChoiceCard, HexTile, TextArea, TextField } from '../../components/ui/primitives';
@@ -41,7 +43,6 @@ interface Draft {
   /** null until chosen: defaults to a language the person speaks. */
   langTo: string | null;
   wantsLanguage: boolean;
-  photos: string[];
   urgency: Urgency;
   noDanger: boolean;
   anonymous: boolean;
@@ -79,7 +80,6 @@ export function CreateWizard() {
     langFrom: 'hu',
     langTo: null,
     wantsLanguage: false,
-    photos: [],
     urgency: 'basic',
     noDanger: false,
     anonymous: false,
@@ -89,17 +89,13 @@ export function CreateWizard() {
   const category = draft.categoryId ? findCategory(draft.categoryId).category : null;
   const kind: Kind = category?.defaultKind ?? 'request';
   // Fetched while choosing the spot, so the "similar nearby" step is ready (R-31).
-  const similar = useSimilar(['location', 'similar', 'describe'].includes(step) ? draft.categoryId : null, draft.point);
+  const photos = usePhotoUploads('problem_photo', LIMITS.problemPhotos);
+  // L-06: only the area cell is sent to look for similar problems, never the point.
+  const similar = useSimilar(['location', 'similar', 'describe'].includes(step) ? draft.categoryId : null, latLngToCell(draft.point.lat, draft.point.lng, 7));
   const similarList = similar.data ?? [];
   const langTo = draft.langTo ?? me.data?.languages.find((l) => l !== draft.langFrom) ?? 'en';
   const languageNeeded = draft.wantsLanguage || category?.requiresLanguage ? `${draft.langFrom}>${langTo}` : null;
 
-  // Free the object URLs for photo previews when leaving the wizard.
-  const photoUrls = useRef<string[]>([]);
-  useEffect(() => {
-    photoUrls.current = draft.photos;
-  }, [draft.photos]);
-  useEffect(() => () => photoUrls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
   const index = STEPS.indexOf(step);
   const visibleSteps = STEPS.length;
@@ -124,7 +120,7 @@ export function CreateWizard() {
     location: true,
     similar: true,
     describe: draft.title.trim().length >= LIMITS.titleMin && (!languageNeeded || draft.langFrom !== langTo),
-    photos: true,
+    photos: !photos.uploading,
     urgency: draft.urgency !== 'serious' || draft.noDanger,
     review: true,
   };
@@ -143,7 +139,7 @@ export function CreateWizard() {
         saveExactPrivately: draft.saveExact,
         languageNeeded,
         anonymous: draft.anonymous,
-        photoCount: draft.photos.length,
+        mediaIds: photos.mediaIds,
         communityId: null,
       });
       toast(t('create.posted'));
@@ -331,41 +327,7 @@ export function CreateWizard() {
         {step === 'photos' && (
           <>
             <StepTitle title={t('create.photos.title')} body={t('create.photos.body')} />
-            <div className="grid grid-cols-3 gap-2.5">
-              {draft.photos.map((url, i) => (
-                <div key={url} className="relative aspect-square overflow-hidden rounded-2xl bg-line">
-                  <img src={url} alt={t('create.photos.alt', { n: i + 1 })} className="size-full object-cover" />
-                  <button
-                    type="button"
-                    aria-label={t('create.photos.remove')}
-                    onClick={() => {
-                      URL.revokeObjectURL(url);
-                      set({ photos: draft.photos.filter((u) => u !== url) });
-                    }}
-                    className="absolute top-1.5 right-1.5 flex size-8 items-center justify-center rounded-full bg-ink/70 text-white"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
-              {draft.photos.length < LIMITS.problemPhotos && (
-                <label className="flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-line-strong bg-white text-[13px] font-bold text-ink-2 hover:border-brand hover:text-brand">
-                  <ImagePlus size={24} />
-                  {t('create.photos.add')}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="sr-only"
-                    onChange={(e) => {
-                      const files = [...(e.target.files ?? [])].slice(0, LIMITS.problemPhotos - draft.photos.length);
-                      set({ photos: [...draft.photos, ...files.map((f) => URL.createObjectURL(f))] });
-                      e.target.value = '';
-                    }}
-                  />
-                </label>
-              )}
-            </div>
+            <PhotoGrid uploads={photos} />
             <p className="mt-4 flex gap-2.5 rounded-2xl bg-sapphire-tint p-3.5 text-[13px] leading-relaxed text-sapphire-ink">
               <Camera size={18} className="shrink-0" />
               {t('create.photos.privacy')}
@@ -432,7 +394,7 @@ export function CreateWizard() {
                   {t(`create.location.${draft.precision}`)} · {AREA_SIZE[draft.precision]}
                 </dd>
                 <dt className="text-muted">{t('create.review.photos')}</dt>
-                <dd className="font-semibold">{draft.photos.length}</dd>
+                <dd className="font-semibold">{photos.mediaIds.length}</dd>
               </dl>
             </div>
             <label className="mt-4 flex items-start gap-3 rounded-[20px] bg-white p-4 lip-card">
@@ -443,8 +405,22 @@ export function CreateWizard() {
                 <span className="block text-[15px] font-bold">{t('create.review.anonymous')}</span>
                 <span className="mt-0.5 block text-[13px] leading-relaxed text-ink-2">{t('create.review.anonymousHint')}</span>
               </span>
-              <input type="checkbox" role="switch" checked={draft.anonymous} onChange={(e) => set({ anonymous: e.target.checked })} className="mt-1 size-6 accent-brand" />
+              <input
+                type="checkbox"
+                role="switch"
+                checked={draft.anonymous}
+                disabled={!me.data?.canPostAnonymously}
+                onChange={(e) => set({ anonymous: e.target.checked })}
+                className="mt-1 size-6 accent-brand"
+              />
             </label>
+            {!me.data?.canPostAnonymously && <p className="mt-2 text-[12px] text-coral-ink">{t('create.review.anonymousUnavailable')}</p>}
+            {draft.anonymous && draft.precision === 'standard' && kind === 'request' && (
+              // A-08: location often identifies people; suggest the wider area.
+              <button type="button" onClick={() => set({ precision: 'wider' })} className="mt-2 text-left text-[13px] font-bold text-sapphire-ink">
+                {t('create.review.suggestWider')}
+              </button>
+            )}
             <p className="mt-4 text-[12px] leading-relaxed text-muted">{t('create.review.guidelines')}</p>
           </>
         )}

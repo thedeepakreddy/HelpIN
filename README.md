@@ -10,34 +10,100 @@ posts, and communities. HelpIn is **not** a gig or task marketplace: no prices, 
 
 **Launching in Budapest, Hungary · web app first (installable PWA), native apps later · English.**
 
-> **Status:** planning complete; the **web app front end is being built** (`apps/web`). It runs
-> against an in-browser mock API that enforces the same rules as the planned backend, so every
-> screen works end to end before the server exists.
+> **Status:** the MVP is built: API, worker, Postgres schema and the web app, wired together.
+> It's ready for a private beta once the production providers (SMS, email, storage, Web Push)
+> are configured and the legal drafts are reviewed. See [what's left before launch](#before-a-public-launch).
 
-## Run the web app
+## Run HelpIn locally
 
-Requires Node 22 and pnpm 10.
+Requires **Node 22**, **pnpm 10** and **Postgres 16**.
 
 ```bash
 pnpm install
-pnpm dev            # http://localhost:5173
+
+# 1. A database and a user (once)
+createuser -s helpin --pwprompt            # password: helpin
+createdb -O helpin helpin
+createdb -O helpin helpin_test             # for the API tests
+
+# 2. Configuration (once)
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+
+# 3. Schema + demo data
+pnpm db:migrate
+pnpm db:seed                               # a believable week in District XI
+
+# 4. API (8787) + worker + web app (5173) together
+pnpm dev
 ```
 
-Log in with any Hungarian phone number and the demo code **123456**. `30 987 6543` signs you in
-as Arjun (a newcomer with an open problem); anything else signs you in as Zsófi (a local helper).
-Switch between them from Profile → ☰.
+Open http://localhost:5173 and sign in with a demo phone number and the code **123456**
+(`AUTH_DEV_CODE`; the API also prints every code it "sends" to its log):
+
+| Phone | Who |
+|---|---|
+| `30 000 0001` | **Zsófi K.**, a local language buddy with karma and photo posts |
+| `30 000 0002` | **Arjun S.**, a newcomer whose letter Zsófi helped with |
+| `30 000 0003` | **Bence T.**, a cyclist who has offered to lend Wei a drill |
+| `30 000 0005` | **Lili R.**, who organises the pond clean-ups |
+| `30 000 0006` | **Olena K.**, chatting with Zsófi about a GP |
+| `30 000 0007` | **Réka M.**, who reported the water outage and a lost cat |
+| `30 000 0008` | **Wei L.**, waiting for a reply about the drill |
+
+Any other number creates a new account and walks you through onboarding. To use the admin
+area, put your email in `ADMIN_EMAILS` in `apps/api/.env`, sign in with that email, and set up
+2FA when asked.
 
 ```bash
+pnpm db:reset && pnpm db:seed          # start over (refuses to run in production)
 pnpm lint && pnpm typecheck && pnpm test && pnpm build   # what CI runs
+node e2e/two-neighbours.mjs            # two browsers, real stack: offer → accept → live chat
 ```
+
+### How it fits together
 
 | Path | What it is |
 |---|---|
-| `apps/web` | React 19 + Vite PWA: TanStack Router & Query, Tailwind v4, MapLibre + H3 |
-| `apps/web/src/api` | The `ApiClient` interface, the mock implementation and its seed data |
-| `packages/config` | Categories, karma and response-rule numbers, languages (one source of truth) |
-| `packages/contracts` | Zod schemas for every API shape; tests assert no public shape leaks an exact location |
+| `apps/web` | React 19 + Vite PWA: TanStack Router & Query, Tailwind v4, MapLibre + H3, Web Push service worker |
+| `apps/api` | Fastify 5 API (`src/server.ts`) and worker (`src/worker.ts`) in one package: modules for identity, problems, help, chat, media, social, notifications and safety |
+| `apps/api/src/jobs` | Outbox dispatcher, event consumers (nearby alerts, karma, notifications, media processing) and scheduled jobs (response rule sweep, reminders, privacy purge) |
+| `packages/domain` | The rulebook as pure functions (offers, response rule, karma, quorum), unit-tested without a database |
+| `packages/db` | SQL migrations, the migration runner, generated Kysely types and the Budapest launch area |
+| `packages/config` | Categories, karma and response-rule numbers, rate limits, languages (one source of truth) |
+| `packages/contracts` | Zod schemas for every API shape; tests assert no public shape leaks an exact location, phone or email |
 | `packages/geo` | H3 helpers: snapping a point to its public area, cells for the map |
+
+Every write runs in one transaction: lock → decide (pure domain rule) → write → append outbox
+events. The worker delivers events at least once to idempotent consumers. Realtime updates go
+through `pg_notify` and a Server-Sent Events stream. Auth, storage and realtime are self-hosted
+behind adapters ([ADR-029](docs/05-decisions.md)).
+
+### Configuration
+
+Everything is set through environment variables; [`apps/api/.env.example`](apps/api/.env.example)
+documents each one. For production you need:
+
+- `NODE_ENV=production`, a random `JWT_SECRET` of 32+ characters, and **no** `AUTH_DEV_CODE`
+- `SMS_PROVIDER=twilio` (+ credentials) and `EMAIL_PROVIDER=smtp` (+ `SMTP_URL`)
+- `STORAGE_DRIVER=s3` with an EU bucket, or a persistent `STORAGE_DIR`
+- `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`) for push
+- `ADMIN_EMAILS` for the founder's account, `WEB_ORIGINS`, `PUBLIC_API_URL` and `WEB_URL`
+- `VITE_API_URL` when building the web app
+
+The API runs migrations on start. Run one API process per CPU behind HTTPS, and one or more
+worker processes (jobs use leases, so extra workers are safe).
+
+### Before a public launch
+
+- **Untested against real services:** the S3 driver, Twilio, SMTP and real Web Push delivery
+  have adapters and configuration but have only run against their development stand-ins.
+- **Legal pages** (`/legal/*`) are drafts with placeholders for the operator's details; a lawyer
+  should review them (ADR-019, ADR-025).
+- **District tags** for the launch area are approximate (nearest district centre per H3 cell);
+  replace them with official district boundaries before relying on district statistics.
+- **Map tiles** come from OpenFreeMap; pick a production tile provider and add it to the privacy
+  notice.
 
 **Start here → [HelpIn MVP Plan v2](docs/00-helpin-plan.md)**, the complete plan in one document.
 

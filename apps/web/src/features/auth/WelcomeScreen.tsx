@@ -66,7 +66,16 @@ export function WelcomeScreen() {
             <Link to="/login" search={{ mode: 'login' }} className={buttonClass('secondary', 'md', true)}>
               {t('welcome.haveAccount')}
             </Link>
-            <p className="mt-0.5 text-center text-[12px] text-muted">{t('welcome.legal')}</p>
+            <p className="mt-0.5 flex justify-center gap-1.5 text-center text-[12px] text-muted">
+              <span>{t('welcome.adultOnly')}</span>·
+              <Link to="/legal/$page" params={{ page: 'terms' }} className="text-muted">
+                {t('legal.terms')}
+              </Link>
+              ·
+              <Link to="/legal/$page" params={{ page: 'privacy' }} className="text-muted">
+                {t('legal.privacy')}
+              </Link>
+            </p>
           </div>
         </section>
       </div>

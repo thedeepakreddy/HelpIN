@@ -1,14 +1,17 @@
-import { Link, Outlet, useRouterState } from '@tanstack/react-router';
-import { Bell, Map, MessageCircle, Plus, User, Users, type LucideIcon } from 'lucide-react';
+import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router';
+import { Bell, Map, MessageCircle, Plus, Settings, ShieldCheck, User, Users, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useConversations, useMe, useNotifications } from '../api/hooks';
+import { api } from '../api';
+import { useConversations, useMe, useNotifications, useRealtime } from '../api/hooks';
 import { Logo } from '../components/domain/Hexies';
 import { buttonClass } from '../components/ui/Button';
 import { HexAvatar } from '../components/ui/primitives';
 import { cn } from '../lib/cn';
 
 interface Tab {
-  to: '/problems' | '/community' | '/chat' | '/profile' | '/notifications';
+  to: '/problems' | '/community' | '/chat' | '/profile' | '/notifications' | '/settings' | '/admin';
   label: string;
   icon: LucideIcon;
   match: string[];
@@ -61,9 +64,35 @@ export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const tabs = useTabs();
   const me = useMe();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  useRealtime(!!me.data);
+  // When the session ends anywhere (logout, expiry, account deleted), go back to the start.
+  useEffect(
+    () =>
+      api.onSignedOut(() => {
+        qc.clear();
+        void navigate({ to: '/welcome' });
+      }),
+    [navigate, qc],
+  );
+  // Fallback when the service worker can't navigate an open tab after a notification click.
+  useEffect(() => {
+    const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : undefined;
+    if (!sw) return;
+    const onMessage = (e: MessageEvent<{ type?: string; url?: string }>) => {
+      if (e.data?.type === 'NAVIGATE' && e.data.url?.startsWith('/')) void navigate({ href: e.data.url });
+    };
+    sw.addEventListener('message', onMessage);
+    return () => sw.removeEventListener('message', onMessage);
+  }, [navigate]);
+  const staffTabs: Tab[] = [
+    { to: '/settings', label: t('nav.settings'), icon: Settings, match: ['/settings'] },
+    ...(me.data?.role === 'admin' || me.data?.role === 'moderator' ? [{ to: '/admin' as const, label: t('nav.admin'), icon: ShieldCheck, match: ['/admin'] }] : []),
+  ];
   const isActive = (tab: Tab) => tab.match.some((m) => pathname.startsWith(m));
   // Full-screen flows hide the tab bar on phones.
-  const immersive = pathname.startsWith('/create') || /^\/chat\/.+/.test(pathname) || pathname.startsWith('/p/');
+  const immersive = pathname.startsWith('/create') || /^\/chat\/.+/.test(pathname) || pathname.startsWith('/p/') || pathname.startsWith('/community/new');
   const mobileTabs = tabs.filter((tab) => tab.to !== '/notifications');
 
   return (
@@ -78,7 +107,7 @@ export function AppShell() {
           {t('nav.create')}
         </Link>
         <nav aria-label={t('nav.main')} className="flex flex-col gap-0.5">
-          {tabs.map((tab) => {
+          {[...tabs, ...staffTabs].map((tab) => {
             const active = isActive(tab);
             return (
               <Link
@@ -99,7 +128,7 @@ export function AppShell() {
         </nav>
         {me.data && (
           <Link to="/profile" className="mt-auto flex items-center gap-2.5 border-t border-line px-2 pt-3 text-ink no-underline">
-            <HexAvatar initials={me.data.initials} color={me.data.color} size={36} />
+            <HexAvatar initials={me.data.initials} color={me.data.color} photo={me.data.avatar} size={36} />
             <span>
               <span className="block text-[14px] font-bold">{me.data.displayName}</span>
               <span className="block text-[12px] text-ink-2">{t('profile.karmaCount', { count: me.data.karma })}</span>

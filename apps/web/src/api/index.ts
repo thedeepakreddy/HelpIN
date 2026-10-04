@@ -1,19 +1,9 @@
-import type { ApiClient } from './client';
-import { MockApi } from './mock/mockApi';
-import { createSeed } from './mock/seed';
+import { HelpInApi } from './client';
 
-function safeStorage(): Storage | null {
-  try {
-    return typeof window !== 'undefined' ? window.localStorage : null;
-  } catch {
-    return null;
-  }
-}
+/** The API base URL; the dev server and `vite preview` default to the local API. */
+export const API_URL: string = import.meta.env.VITE_API_URL ?? 'http://localhost:8787';
 
-/**
- * The app talks to this client only. Until the backend exists it is an in-memory mock that
- * enforces the same domain rules; swapping in the HTTP client changes nothing in the screens.
- */
-export const api: ApiClient = new MockApi(createSeed(), { storage: safeStorage() });
+export const api = new HelpInApi(API_URL);
 
 export { ApiError } from './client';
+export type { MediaPurpose, RealtimeEvent } from './client';

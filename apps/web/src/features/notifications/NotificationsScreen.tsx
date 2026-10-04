@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from '@tanstack/react-router';
-import { ArrowLeft, Bell, CircleCheck, Clock, HandHeart, MapPin, MessageCircle, PenLine, Star, Users, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, Bell, CircleCheck, Clock, HandHeart, MapPin, MessageCircle, PenLine, ShieldAlert, Star, Users, type LucideIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { AppNotification } from '@helpin/contracts';
+import { api } from '../../api';
 import { useMarkAllRead, useNotifications, useStillNeedHelp } from '../../api/hooks';
+import { Sheet } from '../../components/ui/Sheet';
 import { Hexie } from '../../components/domain/Hexies';
 import { Button, IconButton } from '../../components/ui/Button';
 import { useToast } from '../../components/ui/Toast';
-import { EmptyState, Eyebrow, HexTile, Skeleton } from '../../components/ui/primitives';
+import { EmptyState, Eyebrow, HexTile, Skeleton, TextArea } from '../../components/ui/primitives';
 import { cn } from '../../lib/cn';
 import { errorMessage } from '../../lib/errors';
 import { relativeTime } from '../../lib/time';
@@ -22,6 +24,13 @@ const TYPE: Record<AppNotification['type'], { icon: LucideIcon; color: string }>
   problem_updated: { icon: PenLine, color: 'sapphire' },
   community: { icon: Users, color: 'mint' },
   message: { icon: MessageCircle, color: 'sapphire' },
+  offer_declined: { icon: HandHeart, color: 'tram' },
+  problem_closed: { icon: CircleCheck, color: 'brand' },
+  penalty: { icon: Clock, color: 'coral' },
+  tag_request: { icon: Star, color: 'tram' },
+  comment: { icon: MessageCircle, color: 'brand' },
+  content_removed: { icon: ShieldAlert, color: 'coral' },
+  system: { icon: Bell, color: 'sapphire' },
 };
 
 const DAY = 24 * 3_600_000;
@@ -120,6 +129,7 @@ function NotificationCard({ n }: { n: AppNotification }) {
           {n.body} · {relativeTime(n.createdAt)}
         </p>
         {n.type === 'response_due' && n.problemId && <ResponseActions problemId={n.problemId} onOpen={open} />}
+        {n.type === 'content_removed' && n.moderationActionId !== null && <AppealAction actionId={n.moderationActionId} />}
         {n.type === 'solve_claimed' && (
           <Button size="sm" className="mt-2.5" onClick={(e) => (e.stopPropagation(), open())}>
             {t('actions.confirmSolved')}
@@ -127,6 +137,52 @@ function NotificationCard({ n }: { n: AppNotification }) {
         )}
       </div>
     </article>
+  );
+}
+
+/** S-09 / DSA: every decision can be appealed once. */
+function AppealAction({ actionId }: { actionId: number }) {
+  const { t } = useTranslation();
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <Button size="sm" variant="secondary" className="mt-2.5" onClick={() => setOpen(true)}>
+        {t('appeal.cta')}
+      </Button>
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        title={t('appeal.title')}
+        description={t('appeal.body')}
+        footer={
+          <Button
+            size="lg"
+            block
+            loading={busy}
+            disabled={!text.trim()}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await api.appeal(actionId, text.trim());
+                toast(t('appeal.sent'));
+                setOpen(false);
+              } catch (e) {
+                toast(errorMessage(e, t), 'error');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {t('appeal.send')}
+          </Button>
+        }
+      >
+        <TextArea label={t('appeal.label')} value={text} maxLength={2000} rows={5} onChange={(e) => setText(e.target.value)} />
+      </Sheet>
+    </div>
   );
 }
 

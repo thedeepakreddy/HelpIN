@@ -238,3 +238,53 @@ export const LAUNCH_AREA = {
 } as const;
 
 export const EMERGENCY_NUMBER = '112';
+
+/** R-21 / R-22: "Fixed now" votes must fall within this window; reporter may credit afterwards. */
+export const ISSUE_RESOLUTION = {
+  fixedWindowHours: 48,
+  creditAfterSolveHours: 72,
+} as const;
+
+/** K-13: escalation of silence penalties. */
+export const ON_NOTICE = {
+  penaltyWindowDays: 30,
+  durationDays: 14,
+  problemsPerDay: 1,
+} as const;
+
+/** K-07: karma eligibility. */
+export const ELIGIBILITY = { minAccountAgeHours: 24 } as const;
+
+/** K-15: reliability shown once there are enough problems. */
+export const RELIABILITY = { windowDays: 90, minProblems: 3 } as const;
+
+/** C-03: chat stays writable this long after the problem ends. */
+export const CHAT_GRACE_HOURS = 48;
+
+/** L-07: exact locations are purged this long after a problem is terminal. */
+export const PRIVATE_LOCATION_RETENTION_DAYS = 7;
+
+/** K-16 / A-05: consequences of an upheld fake-problem report. */
+export const FAKE_PROBLEM = { anonymousBanDays: 90, restrictWindowDays: 180 } as const;
+
+/** S-05: content auto-hides at this many distinct reports. */
+export const AUTO_HIDE_REPORTS = 3;
+
+/** R-14: reminders after a helper says it's solved. */
+export const SOLVE_CLAIM_REMINDER_HOURS = [24, 72] as const;
+
+/** Domain §9: default rate limits (per user, fixed windows). */
+export const RATE_LIMITS = {
+  createProblem: { max: 5, windowHours: 24 },
+  offerHelp: { max: 30, windowHours: 24 },
+  message: { max: 300, windowHours: 1 },
+  update: { max: 10, windowHours: 24 }, // R-45, per problem
+  post: { max: 10, windowHours: 24 },
+  comment: { max: 60, windowHours: 1 },
+  report: { max: 20, windowHours: 24 },
+  otpPerDestination: { max: 5, windowHours: 1 },
+  otpPerIp: { max: 20, windowHours: 1 },
+} as const;
+
+/** Nearby fan-out (Architecture §8.2). */
+export const NEARBY_ALERTS = { firstWave: 150, secondWaveAfterMinutes: 20, sparseThreshold: 20 } as const;
