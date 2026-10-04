@@ -24,6 +24,7 @@ secondary to the problem-solving loop.
 | 03 | [Architecture](docs/03-architecture.md) | Stack, modular monolith, data layer, outbox/worker, media pipeline, notifications, realtime, API, web app, security, testing, deployment, scaling, extension points |
 | 04 | [MVP Roadmap](docs/04-mvp-roadmap.md) | Revised build phases with exit criteria; Definition of Done mapped to tests |
 | 05 | [Decisions & Open Questions](docs/05-decisions.md) | ADRs (what we chose and why) and the questions only the founder can answer |
+| 06 | [Pages, Components & Buttons](docs/06-ui-spec.md) | Every page and route, the shell layout, design tokens, the component library, every button (who sees it, what it does, which API), sheets, error messages, empty states |
 | — | [schema-draft.sql](docs/schema-draft.sql) | Postgres schema, the starting point for migration 0001 (validated on Postgres 16) |
 
 ## The plan in one screen

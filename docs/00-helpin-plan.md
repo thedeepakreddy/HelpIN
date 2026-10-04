@@ -121,7 +121,7 @@ and three separate tabs: **Posts** (feed photos) · **Problem photos** (report +
 ### Feed
 A local, chronological photo feed (captions, ❤️, comments). It's secondary to problems and can be
 switched off per area. It's included in the first beta.
-→ [03 §12 Web app](03-architecture.md#12-web-app-architecture)
+→ [03 §12 Web app](03-architecture.md#12-web-app-architecture) · full page & button spec: [06 — Pages, Components & Buttons](06-ui-spec.md)
 
 ---
 

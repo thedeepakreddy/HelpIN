@@ -424,7 +424,7 @@ deep-links to a normal URL (`/p/{id}`, `/chat/{id}`), and that URL shows the sam
 
 | Area | Endpoints |
 |---|---|
-| Me | `GET /me` · `PATCH /me/profile` · `PUT /me/home-area` · `PUT /me/alert-prefs` · `POST/DELETE /me/push-subscriptions` · `GET /me/export` (GDPR data export) · `DELETE /me` (account deletion) |
+| Me | `GET /me` · `PATCH /me/profile` · `PUT /me/home-area` · `PUT /me/alert-prefs` · `POST/DELETE /me/push-subscriptions` · `POST /me/push-subscriptions/test` · `GET /me/karma` (ledger history) · `GET /me/export` (GDPR data export) · `DELETE /me` (account deletion) |
 | Users | `GET /users/{id}` · `GET /users/{id}/solver-history` · `GET /users/{id}/posts` · `GET /users/{id}/problem-photos` (anonymous problems excluded, A-04) |
 | Map & incidents | `GET /map?bbox&zoom` · `GET /incidents/similar?cell&category` · `GET /incidents/{id}` |
 | Problems | `POST /problems` (with `anonymous` flag) · `POST /problems/{id}/withdraw` · `POST /problems/{id}/confirm-solved` · `POST /problems/{id}/credit` (after quorum, R-22) · `GET /me/problems` |
@@ -433,7 +433,7 @@ deep-links to a normal URL (`/p/{id}`, `/chat/{id}`), and that URL shows the sam
 | Help | `POST /problems/{id}/offers` · `GET /problems/{id}/offers` (asker) · `POST /offers/{id}/accept` · `…/decline` · `…/withdraw` · `…/claim-solved` · `GET /me/offers` |
 | Chat | `GET /conversations` · `GET /conversations/{id}/messages?before|after` · `POST /conversations/{id}/messages` · `POST /conversations/{id}/read` · `POST /conversations/{id}/share-location` · `POST /conversations/{id}/reveal-identity` (anonymous askers, A-03) |
 | Media | `POST /media/upload-url` · `POST /media/{id}/finalize` · `GET /media/{id}` |
-| Feed | `GET /feed` · `POST /posts` · `DELETE /posts/{id}` · `GET/POST /posts/{id}/comments` · `PUT/DELETE /posts/{id}/reaction` |
+| Feed | `GET /feed` · `POST /posts` · `DELETE /posts/{id}` · `GET/POST /posts/{id}/comments` · `DELETE /comments/{id}` · `PUT/DELETE /posts/{id}/reaction` |
 | Safety | `POST /reports` · `POST /blocks` · `DELETE /blocks/{userId}` · `GET /me/blocks` · `POST /appeals` (DSA) |
 | Notifications | `GET /me/notifications` · `POST /me/notifications/read` |
 | Meta | `GET /meta/config` (categories, urgency labels, limits, launch areas; versioned and cached) |
@@ -486,6 +486,8 @@ need a deploy of the client:
 | Accessibility | WCAG 2.1 AA target. Urgency = icon + text + colour; keyboard navigation; screen-reader labels on map cards; respects reduced-motion and dark mode |
 
 ### Screen map (URLs)
+
+The full page, component and button specification is in [06 — Pages, Components & Buttons](06-ui-spec.md).
 
 ```
 /welcome           → sign up / log in with phone (SMS code) or email (email code)
