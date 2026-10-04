@@ -208,8 +208,8 @@ export class HelpInApi {
   getUserProblemPhotos = (id: string) => this.get<ProblemPhoto[]>(`/v1/users/${id}/problem-photos`);
   getSolverHistory = (id: string) => this.get<SolverHistoryItem[]>(`/v1/users/${id}/solver-history`);
   getConfig = () => this.get<{ vapidPublicKey: string | null; launchArea: { flags: Record<string, boolean> } }>('/v1/meta/config');
-  async setupMfa() {
-    return this.post<{ enabled: boolean; secret: string | null; otpauthUrl: string | null }>('/v1/auth/mfa/setup');
+  async setupMfa(reset = false) {
+    return this.post<{ enabled: boolean; secret: string | null; otpauthUrl: string | null }>('/v1/auth/mfa/setup', reset ? { reset: true } : {});
   }
   async verifyMfa(code: string) {
     const res = await this.post<{ accessToken: string; expiresIn: number; me: Me }>('/v1/auth/mfa/verify', { code });

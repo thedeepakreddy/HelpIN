@@ -372,11 +372,18 @@ export function identityRoutes(app: FastifyInstance, ctx: Ctx) {
   app.post('/v1/auth/mfa/setup', async (req) => {
     const user = await requireUser(ctx, req, { onboarded: false });
     if (user.role === 'user') throw forbidden('FORBIDDEN', 'Two-factor login is for admins and moderators.');
+    // `reset` replaces a key that was never confirmed (e.g. mistyped into the authenticator app).
+    const { reset } = parse(z.object({ reset: z.boolean().optional() }), req.body ?? {});
     const existing = await ctx.db.selectFrom('user_totp').selectAll().where('user_id', '=', user.id).executeTakeFirst();
     if (existing?.enabled_at) return { enabled: true, secret: null, otpauthUrl: null };
-    const secret = existing?.secret ?? newTotpSecret();
+    let secret = existing?.secret ?? newTotpSecret();
     if (!existing) await ctx.db.insertInto('user_totp').values({ user_id: user.id, secret, created_at: now() }).execute();
-    const label = encodeURIComponent(`HelpIn:${user.id.slice(0, 8)}`);
+    else if (reset) {
+      secret = newTotpSecret();
+      await ctx.db.updateTable('user_totp').set({ secret, created_at: now() }).where('user_id', '=', user.id).where('enabled_at', 'is', null).execute();
+    }
+    const account = await ctx.db.selectFrom('users').select('email').where('id', '=', user.id).executeTakeFirst();
+    const label = encodeURIComponent(`HelpIn:${account?.email ?? user.id.slice(0, 8)}`);
     return { enabled: false, secret, otpauthUrl: `otpauth://totp/${label}?secret=${secret}&issuer=HelpIn&digits=6&period=30` };
   });
 

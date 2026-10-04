@@ -59,9 +59,9 @@ export function totpCode(secretBase32: string, at: number, stepSeconds = 30): st
   return code.padStart(6, '0');
 }
 
-/** Accepts the current code and one step either side (clock drift). */
+/** Accepts the current code and two steps either side (phone clocks drift; codes are rate-limited). */
 export function verifyTotp(secretBase32: string, code: string, at: number): boolean {
-  return [-1, 0, 1].some((d) => safeEqual(totpCode(secretBase32, at + d * 30_000), code));
+  return [-2, -1, 0, 1, 2].some((d) => safeEqual(totpCode(secretBase32, at + d * 30_000), code));
 }
 
 export const newTotpSecret = () => base32Encode(randomBytes(20));

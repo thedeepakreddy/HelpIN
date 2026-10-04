@@ -135,11 +135,18 @@ describe('safety and moderation (S-04…S-10, A-06, A-07, K-16)', () => {
     // S-10: an admin without a verified second factor is turned away.
     const admin = { ...(await h.user('Founder', { role: 'admin' })), mfa: false };
     expect((await h.req(admin, 'GET', '/v1/admin/reports')).body.error.code).toBe('MFA_REQUIRED');
-    const setup = (await h.req(admin, 'POST', '/v1/auth/mfa/setup')).body;
+    const first = (await h.req(admin, 'POST', '/v1/auth/mfa/setup')).body;
+    expect((await h.req(admin, 'POST', '/v1/auth/mfa/setup')).body.secret).toBe(first.secret); // stable until confirmed
+    // A key mistyped into the authenticator can be replaced before it's confirmed; the old one stops working.
+    const setup = (await h.req(admin, 'POST', '/v1/auth/mfa/setup', { reset: true })).body;
+    expect(setup.secret).not.toBe(first.secret);
+    expect((await h.req(admin, 'POST', '/v1/auth/mfa/verify', { code: totpCode(first.secret, now().getTime()) })).status).toBe(400);
     const verified = await h.req(admin, 'POST', '/v1/auth/mfa/verify', { code: totpCode(setup.secret, now().getTime()) });
     expect(verified.status).toBe(200);
     expect(verified.body.me.mfaVerified).toBe(true);
     const staff = { ...admin, mfa: true };
+    // Once confirmed, the key can't be swapped or shown again.
+    expect((await h.req(staff, 'POST', '/v1/auth/mfa/setup', { reset: true })).body).toMatchObject({ enabled: true, secret: null });
 
     const queue = (await h.req(staff, 'GET', '/v1/admin/reports')).body;
     expect(queue).toHaveLength(1);

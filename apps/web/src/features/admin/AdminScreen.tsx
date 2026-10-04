@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { Link } from '@tanstack/react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, KeyRound, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Copy, KeyRound, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { AdminDecision, AdminReport } from '@helpin/contracts';
 import { api } from '../../api';
@@ -55,27 +56,74 @@ function MfaGate({ enabled }: { enabled: boolean }) {
   const qc = useQueryClient();
   const setup = useQuery({ queryKey: ['mfa-setup'], queryFn: () => api.setupMfa(), enabled: !enabled });
   const [code, setCode] = useState('');
+  const [qr, setQr] = useState<string | null>(null);
+  const otpauthUrl = setup.data?.otpauthUrl ?? null;
+  const secret = setup.data?.secret ?? null;
+
+  useEffect(() => {
+    let live = true;
+    if (otpauthUrl) void QRCode.toDataURL(otpauthUrl, { margin: 1, width: 220 }).then((url) => live && setQr(url));
+    return () => {
+      live = false;
+    };
+  }, [otpauthUrl]);
+
   const verify = useMutation({
     mutationFn: () => api.verifyMfa(code),
     onSuccess: (me) => qc.setQueryData(qk.me, me),
+    onError: (e) => {
+      setCode('');
+      toast(errorMessage(e, t), 'error');
+    },
+  });
+  const reset = useMutation({
+    mutationFn: () => api.setupMfa(true),
+    onSuccess: (data) => {
+      qc.setQueryData(['mfa-setup'], data);
+      setCode('');
+      toast(t('admin.mfaResetDone'));
+    },
     onError: (e) => toast(errorMessage(e, t), 'error'),
   });
+  const copy = async () => {
+    if (!secret) return;
+    try {
+      await navigator.clipboard.writeText(secret);
+      toast(t('admin.mfaCopied'));
+    } catch {
+      toast(t('admin.mfaCopyFailed'), 'error');
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-md px-5 pt-10">
+    <div className="mx-auto max-w-md px-5 pt-10 pb-10">
       <span className="hex mb-4 flex h-14 w-12 items-center justify-center bg-brand-tint text-brand">
         <KeyRound size={24} />
       </span>
       <h1 className="font-display text-[28px] font-extrabold">{t('admin.mfaTitle')}</h1>
       <p className="mt-1.5 text-[15px] text-ink-2">{enabled ? t('admin.mfaEnter') : t('admin.mfaSetup')}</p>
-      {!enabled && setup.data?.secret && (
+      {!enabled && secret && (
         <div className="mt-4 rounded-2xl bg-white p-4 lip-card">
-          <p className="text-[13px] font-bold">{t('admin.mfaSecret')}</p>
-          <code className="mt-1 block font-mono text-[15px] break-all select-all">{setup.data.secret}</code>
-          {setup.data.otpauthUrl && (
-            <a href={setup.data.otpauthUrl} className="mt-2 inline-block text-[13px] font-bold text-brand">
+          {qr && (
+            <div className="mb-3 flex flex-col items-center">
+              <img src={qr} alt={t('admin.mfaQrAlt')} width={220} height={220} className="rounded-xl" />
+              <p className="mt-2 text-center text-[13px] text-ink-2">{t('admin.mfaScan')}</p>
+            </div>
+          )}
+          {otpauthUrl && (
+            <a href={otpauthUrl} className="block rounded-xl bg-brand-tint px-3 py-2.5 text-center text-[14px] font-bold text-brand no-underline">
               {t('admin.mfaOpenApp')}
             </a>
           )}
+          <p className="mt-4 text-[13px] font-bold">{t('admin.mfaSecret')}</p>
+          <div className="mt-1 flex items-start gap-2">
+            <code className="min-w-0 flex-1 font-mono text-[15px] leading-relaxed tracking-wide break-words select-all">{secret.match(/.{1,4}/g)?.join(' ')}</code>
+            <Button size="sm" variant="secondary" onClick={() => void copy()}>
+              <Copy size={15} />
+              {t('admin.mfaCopy')}
+            </Button>
+          </div>
+          <p className="mt-2 text-[12px] leading-relaxed text-muted">{t('admin.mfaHint')}</p>
         </div>
       )}
       <form
@@ -90,6 +138,12 @@ function MfaGate({ enabled }: { enabled: boolean }) {
           {t('login.verify')}
         </Button>
       </form>
+      {!enabled && secret && (
+        <button type="button" onClick={() => reset.mutate()} disabled={reset.isPending} className="mx-auto mt-5 flex items-center gap-1.5 text-[13px] font-bold text-ink-2">
+          <RotateCcw size={14} />
+          {t('admin.mfaReset')}
+        </button>
+      )}
     </div>
   );
 }
