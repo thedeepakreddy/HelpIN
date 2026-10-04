@@ -93,7 +93,7 @@ documents each one. For production you need:
 - `ADMIN_EMAILS` for the founder's account, `WEB_ORIGINS`, `PUBLIC_API_URL` and `WEB_URL`
 - `VITE_API_URL` when building the web app
 
-The API runs migrations on start. Run one API process per CPU behind HTTPS, and one or more
+To put it online, see [docs/08-deploy.md](docs/08-deploy.md) (Render + Neon, one service). The API runs migrations on start. Run one API process per CPU behind HTTPS, and one or more
 worker processes (jobs use leases, so extra workers are safe).
 
 ### Before a public launch
@@ -122,6 +122,7 @@ worker processes (jobs use leases, so extra workers are safe).
 | 05 | [Decisions & Open Questions](docs/05-decisions.md) | ADRs (what we chose and why) and the questions only the founder can answer |
 | 06 | [Pages, Components & Buttons](docs/06-ui-spec.md) | Every page and route, the shell layout, design tokens, the component library, every button (who sees it, what it does, which API), sheets, error messages, empty states |
 | 07 | [Email & photo storage](docs/07-email-and-storage.md) | Setting up Brevo and Cloudflare R2, step by step, and checking they work |
+| 08 | [Deploying](docs/08-deploy.md) | Putting HelpIn online on Render + Neon (free tier), private test mode, installing on a phone |
 | — | [schema-draft.sql](docs/schema-draft.sql) | Postgres schema, the starting point for migration 0001 (validated on Postgres 16) |
 
 ## The plan in one screen

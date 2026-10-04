@@ -11,6 +11,15 @@ const EnvSchema = z.object({
   WEB_ORIGINS: z.string().default('http://localhost:5173,http://localhost:4173'),
   /** HS256 secret for access tokens (≥ 32 chars in production). */
   JWT_SECRET: z.string().min(16),
+  /**
+   * Private test deployments without an SMS/email provider: sign-in codes are written to the
+   * server log (readable only by whoever can open the hosting dashboard) instead of being sent.
+   * Nobody else can sign in, so this is for the founder's own testing only.
+   */
+  CODES_IN_LOGS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   /** Development only: this code is accepted for any OTP challenge. Refused in production. */
   AUTH_DEV_CODE: z.string().regex(/^\d{6}$/).optional(),
   SMS_PROVIDER: z.enum(['console', 'twilio']).default('console'),
@@ -42,17 +51,30 @@ const EnvSchema = z.object({
   GEOCODER: z.enum(['none', 'nominatim']).default('none'),
   NOMINATIM_URL: z.string().default('https://nominatim.openstreetmap.org'),
   WEB_URL: z.string().default('http://localhost:5173'),
+  /** Run the outbox worker and scheduled jobs inside the API process (one-service deployments). */
+  RUN_WORKER: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  /** Serve the built web app (apps/web/dist) from the API, so app and API share one address. */
+  WEB_DIST: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
 
 export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
-  const env = EnvSchema.parse(source);
+  // One public address for app + API (PUBLIC_URL, or Render's RENDER_EXTERNAL_URL) fills in the
+  // three address settings unless they're set explicitly.
+  const publicUrl = source.PUBLIC_URL ?? source.RENDER_EXTERNAL_URL;
+  const withDefaults = publicUrl
+    ? { PUBLIC_API_URL: publicUrl, WEB_URL: publicUrl, WEB_ORIGINS: publicUrl, ...stripEmpty(source) }
+    : source;
+  const env = EnvSchema.parse(withDefaults);
   if (env.NODE_ENV === 'production') {
     if (env.AUTH_DEV_CODE) throw new Error('AUTH_DEV_CODE must not be set in production');
     if (env.JWT_SECRET.length < 32) throw new Error('JWT_SECRET must be at least 32 characters in production');
-    if (env.SMS_PROVIDER === 'console' || env.EMAIL_PROVIDER === 'console') {
-      throw new Error('Configure real SMS and email providers in production');
+    if ((env.SMS_PROVIDER === 'console' || env.EMAIL_PROVIDER === 'console') && !env.CODES_IN_LOGS) {
+      throw new Error('Configure real SMS and email providers in production (or CODES_IN_LOGS=true for a private test)');
     }
   }
   return env;
@@ -64,3 +86,5 @@ export const adminEmails = (env: Env) =>
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean),
   );
+
+const stripEmpty = (source: Record<string, string | undefined>) => Object.fromEntries(Object.entries(source).filter(([, v]) => v !== undefined && v !== ''));

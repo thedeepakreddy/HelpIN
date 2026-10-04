@@ -1,4 +1,5 @@
 import webpush from 'web-push';
+import type { Db } from '@helpin/db';
 import type { Env } from './env';
 
 export interface PushPayload {
@@ -21,10 +22,31 @@ export function pushFromEnv(env: Env): PushSender {
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) {
     return { enabled: false, publicKey: null, send: async () => true };
   }
-  webpush.setVapidDetails(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+  return pushFromKeys(env.VAPID_SUBJECT, env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY);
+}
+
+/**
+ * VAPID keys from the environment, or else the ones this server generated on its first start
+ * (stored in app.server_keys). Keys must never change: subscriptions are tied to them.
+ */
+export async function resolvePush(env: Env, db: Db): Promise<PushSender> {
+  if (env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) return pushFromEnv(env);
+  const generated = webpush.generateVAPIDKeys();
+  await db
+    .insertInto('server_keys')
+    .values({ name: 'vapid', value: JSON.stringify(generated) })
+    .onConflict((oc) => oc.column('name').doNothing())
+    .execute();
+  const row = await db.selectFrom('server_keys').select('value').where('name', '=', 'vapid').executeTakeFirstOrThrow();
+  const keys = row.value as { publicKey: string; privateKey: string };
+  return pushFromKeys(env.VAPID_SUBJECT, keys.publicKey, keys.privateKey);
+}
+
+function pushFromKeys(subject: string, publicKey: string, privateKey: string): PushSender {
+  webpush.setVapidDetails(subject, publicKey, privateKey);
   return {
     enabled: true,
-    publicKey: env.VAPID_PUBLIC_KEY,
+    publicKey,
     async send(sub, payload) {
       try {
         await webpush.sendNotification(sub, JSON.stringify(payload), { TTL: 3600 });

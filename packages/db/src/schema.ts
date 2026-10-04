@@ -480,6 +480,12 @@ export interface Reports {
   target_type: string;
 }
 
+export interface ServerKeys {
+  created_at: Generated<Timestamp>;
+  name: string;
+  value: Json;
+}
+
 export interface Sessions {
   created_at: Generated<Timestamp>;
   expires_at: Timestamp;
@@ -560,6 +566,7 @@ export interface DB {
   rate_limit_keys: RateLimitKeys;
   reactions: Reactions;
   reports: Reports;
+  server_keys: ServerKeys;
   sessions: Sessions;
   user_totp: UserTotp;
   users: Users;

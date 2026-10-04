@@ -1,5 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
+import { resolve } from 'node:path';
 import cors from '@fastify/cors';
+import fastifyStatic from '@fastify/static';
 import type { Ctx } from './platform/context';
 import { toApiError } from './platform/errors';
 import { registerIdempotency } from './platform/idempotency';
@@ -46,7 +48,25 @@ export async function buildApp(ctx: Ctx, opts: { logger?: boolean } = {}): Promi
     ctx.log.error(`Unhandled error on ${req.method} ${req.url.split('?')[0]}`, err);
     return reply.code(500).send({ error: { code: 'INTERNAL', message: 'Something went wrong on our side.' } });
   });
-  app.setNotFoundHandler((_req, reply) => reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Not found.' } }));
+  const webDist = ctx.env.WEB_DIST ? resolve(ctx.env.WEB_DIST) : null;
+  if (webDist) {
+    // One-service deployments: the API also serves the built web app (same address, no CORS).
+    await app.register(fastifyStatic, {
+      root: webDist,
+      wildcard: false,
+      setHeaders(res, filePath) {
+        if (/[\\/]assets[\\/]/.test(filePath)) res.header('Cache-Control', 'public, max-age=31536000, immutable');
+        else res.header('Cache-Control', 'no-cache');
+      },
+    });
+  }
+  app.setNotFoundHandler((req, reply) => {
+    // Client-side routes (/problems, /p/…) load the app shell; API paths keep their JSON 404.
+    if (webDist && req.method === 'GET' && !req.url.startsWith('/v1/') && req.headers.accept?.includes('text/html')) {
+      return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
+    }
+    return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Not found.' } });
+  });
 
   registerIdempotency(app, ctx);
 

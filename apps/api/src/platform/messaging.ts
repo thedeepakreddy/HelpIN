@@ -32,7 +32,7 @@ export function consoleMessaging(log: (msg: string) => void = console.log): { sm
       kind: 'console',
       async send(to, subject, text) {
         sent.email.push({ to, subject, text });
-        log(`[email → ${to}] ${subject}`);
+        log(`[email → ${to}] ${subject}: ${text}`);
       },
     },
   };
