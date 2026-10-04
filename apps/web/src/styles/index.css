@@ -1,0 +1,231 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/figtree';
+/* In a layer so our utilities (e.g. `absolute inset-0` on the map container) win over it. */
+@import 'maplibre-gl/dist/maplibre-gl.css' layer(components);
+
+/* "Tram & Danube" design tokens — docs/06-ui-spec.md §4.1b */
+@theme {
+  --font-sans: 'Figtree Variable', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Figtree Variable', sans-serif;
+
+  --color-brand: #0a7a56;
+  --color-brand-lip: #065a3f;
+  --color-brand-tint: #dcf2e7;
+  --color-brand-ink: #065a3f;
+
+  --color-tram: #ffc531;
+  --color-tram-lip: #d99b00;
+  --color-tram-tint: #fff0c2;
+  --color-tram-ink: #4d3600;
+
+  --color-sapphire: #2352e0;
+  --color-sapphire-lip: #1938a8;
+  --color-sapphire-tint: #e2e9ff;
+  --color-sapphire-ink: #1c43bf;
+
+  --color-amber: #f28c00;
+  --color-amber-tint: #ffeacc;
+  --color-amber-ink: #9a5300;
+
+  --color-coral: #e8452c;
+  --color-coral-lip: #b3301b;
+  --color-coral-tint: #ffe1da;
+  --color-coral-ink: #b8301a;
+
+  --color-ink: #0e1a14;
+  --color-ink-2: #3a4640;
+  --color-muted: #5b665f;
+  --color-paper: #f3f4ee;
+  --color-line: #e3e6de;
+  --color-line-strong: #d3d7cc;
+  --color-mint: #9fd6bc;
+
+  --radius-card: 18px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: default;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-sapphire);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  /* The HelpIn signature shape (pointy-top hexagon). */
+  .hex {
+    clip-path: polygon(50% 0%, 93.3% 25%, 93.3% 75%, 50% 100%, 6.7% 75%, 6.7% 25%);
+  }
+  /* 3D tactile press: the element sinks onto its lip. */
+  .press {
+    transition:
+      transform 80ms ease,
+      box-shadow 80ms ease;
+  }
+  .press:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow: 0 1px 0 rgb(6 90 63 / 0.9) !important;
+  }
+  .lip-brand {
+    box-shadow:
+      0 4px 0 var(--color-brand-lip),
+      0 12px 22px -10px rgb(10 122 86 / 0.6),
+      inset 0 1px 0 rgb(255 255 255 / 0.22);
+  }
+  .lip-tram {
+    box-shadow:
+      0 4px 0 var(--color-tram-lip),
+      0 12px 22px -10px rgb(217 155 0 / 0.6),
+      inset 0 1px 0 rgb(255 255 255 / 0.35);
+  }
+  .lip-coral {
+    box-shadow:
+      0 4px 0 var(--color-coral-lip),
+      0 12px 22px -10px rgb(232 69 44 / 0.5);
+  }
+  .lip-neutral {
+    box-shadow: 0 3px 0 var(--color-line-strong);
+  }
+  .lip-card {
+    box-shadow:
+      0 1px 0 var(--color-line),
+      0 10px 24px -16px rgb(14 26 20 / 0.25);
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+}
+
+/* Hexie mascot motion */
+.hx-blink {
+  animation: hxBlink 4.4s infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.hx-breathe {
+  animation: hxBreathe 3.2s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+.hx-jump {
+  animation: hxJump 0.75s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: bottom center;
+}
+.hx-droop {
+  transform: translateY(4px) scaleY(0.97);
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  transition: transform 0.4s ease;
+}
+.hx-d1 {
+  animation-delay: 0.12s;
+}
+.hx-d2 {
+  animation-delay: 0.24s;
+}
+.hx-confetti {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  animation: hxFall 1.8s ease-in infinite;
+}
+@keyframes hxBlink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.08);
+  }
+}
+@keyframes hxBreathe {
+  0%,
+  100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.025);
+  }
+}
+@keyframes hxJump {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-16px);
+  }
+}
+@keyframes hxFall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(300px) rotate(420deg);
+    opacity: 0;
+  }
+}
+@keyframes sheetUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-sheet {
+  animation: sheetUp 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.animate-fade {
+  animation: fadeIn 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hx-blink,
+  .hx-breathe,
+  .hx-jump,
+  .hx-confetti,
+  .animate-sheet,
+  .animate-fade {
+    animation: none !important;
+  }
+  .press,
+  .hx-droop {
+    transition: none !important;
+  }
+}
+
+/* MapLibre: keep attribution readable but compact */
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+}

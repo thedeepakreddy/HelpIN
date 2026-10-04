@@ -10,8 +10,34 @@ posts, and communities. HelpIn is **not** a gig or task marketplace: no prices, 
 
 **Launching in Budapest, Hungary · web app first (installable PWA), native apps later · English.**
 
-> **Status:** planning complete, all decisions made. This repository holds the plan, theory and
-> architecture the app will be built from. No application code yet.
+> **Status:** planning complete; the **web app front end is being built** (`apps/web`). It runs
+> against an in-browser mock API that enforces the same rules as the planned backend, so every
+> screen works end to end before the server exists.
+
+## Run the web app
+
+Requires Node 22 and pnpm 10.
+
+```bash
+pnpm install
+pnpm dev            # http://localhost:5173
+```
+
+Log in with any Hungarian phone number and the demo code **123456**. `30 987 6543` signs you in
+as Arjun (a newcomer with an open problem); anything else signs you in as Zsófi (a local helper).
+Switch between them from Profile → ☰.
+
+```bash
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # what CI runs
+```
+
+| Path | What it is |
+|---|---|
+| `apps/web` | React 19 + Vite PWA: TanStack Router & Query, Tailwind v4, MapLibre + H3 |
+| `apps/web/src/api` | The `ApiClient` interface, the mock implementation and its seed data |
+| `packages/config` | Categories, karma and response-rule numbers, languages (one source of truth) |
+| `packages/contracts` | Zod schemas for every API shape; tests assert no public shape leaks an exact location |
+| `packages/geo` | H3 helpers: snapping a point to its public area, cells for the map |
 
 **Start here → [HelpIn MVP Plan v2](docs/00-helpin-plan.md)**, the complete plan in one document.
 
