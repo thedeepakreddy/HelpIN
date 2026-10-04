@@ -1,8 +1,11 @@
 # 03 — Architecture
 
-> How HelpIN is built: the stack, the modules, the data flows, and the paths for scaling and
+> How HelpIn is built: the stack, the modules, the data flows, and the paths for scaling and
 > future features. Every choice here is recorded with alternatives in
 > [05 — Decisions](05-decisions.md).
+>
+> **Launch context:** Budapest, Hungary (EU) · **web app first** (installable PWA), native mobile
+> apps planned later · English UI.
 
 ---
 
@@ -12,15 +15,17 @@ What the architecture has to optimise for, in priority order:
 
 1. **Correctness of the core loop.** Solve → credit → karma must never double-award, lose state,
    or leak location. Use transactions, idempotency and an append-only ledger.
-2. **Privacy by structure.** Exact locations are physically separated and unreachable from public
-   reads.
+2. **Privacy by structure, and GDPR by design.** Exact locations are physically separated and
+   unreachable from public reads. All personal data is stored and processed in the EU.
 3. **Small team, fast iteration.** One language (TypeScript) end to end, one database, one
    deployable backend, managed infrastructure.
-4. **Extensibility without rewrites.** AI clustering, payments and reputation upgrades plug in as
-   new modules or event consumers.
-5. **Works on mid-range Android phones and patchy mobile data** ⚑.
+4. **Extensibility without rewrites.** Native apps, AI clustering, payments and reputation
+   upgrades plug in as new clients, modules or event consumers.
+5. **Works well in any modern mobile browser**, on patchy mobile data, and can be installed to the
+   home screen (PWA).
 
-Non-goals for the MVP: microservices, multi-region, custom ML infrastructure, a web client.
+Non-goals for the MVP: native iOS/Android apps (planned next, reusing the API and shared
+packages), microservices, multi-region, custom ML infrastructure.
 
 ---
 
@@ -28,59 +33,65 @@ Non-goals for the MVP: microservices, multi-region, custom ML infrastructure, a 
 
 ```mermaid
 flowchart TB
-  subgraph Client["📱 Mobile app (Expo / React Native, TypeScript)"]
-    UI[Screens: Problems · Feed · Create · Chat · Profile]
+  subgraph Client["🌐 Web app (React + Vite PWA, TypeScript)"]
+    UI[Pages: Problems · Feed · Create · Chat · Profile]
     RQ[TanStack Query cache]
     H3c[h3-js: viewport → cells]
+    SW[Service worker<br/>offline shell · Web Push]
   end
 
-  subgraph Managed["☁️ Supabase (managed)"]
-    Auth[Auth: phone OTP · Google · Apple]
+  subgraph Managed["☁️ Supabase (EU · Frankfurt)"]
+    Auth[Auth: phone SMS OTP · email OTP]
     PG[(Postgres 16<br/>schema: app)]
     Store[(Storage<br/>quarantine · media)]
     RT[Realtime<br/>private broadcast channels]
   end
 
-  subgraph Backend["🖥️ HelpIN backend (Node 22, TypeScript) — one codebase, two processes"]
+  subgraph Backend["🖥️ HelpIn backend (Node 22, TypeScript, EU region) — one codebase, two processes"]
     API[API process<br/>Fastify · REST /v1]
     W[Worker process<br/>outbox dispatcher · jobs · cron]
   end
 
-  subgraph External["External services"]
-    Push[Expo Push → FCM / APNs]
-    Maps[Google Maps SDK<br/>+ Geocoding API]
+  subgraph External["External services (EU / GDPR DPAs)"]
+    Push[Web Push services<br/>VAPID]
+    Mail[Transactional email]
+    Tiles[Vector map tiles<br/>+ geocoding]
     Sentry[Sentry]
-    PH[PostHog]
+    PH[PostHog EU]
   end
 
   UI --> RQ --> API
-  UI -- "sign-in" --> Auth
+  UI -- "sign-in / OTP" --> Auth
   UI -- "signed upload URL" --> Store
   UI -- "subscribe" --> RT
+  UI --> Tiles
+  SW -. receives .- Push
   API -- "verify JWT (JWKS)" --> Auth
   API --> PG
   API -- "signed URLs" --> Store
   W --> PG
   W --> Store
   W --> Push
+  W --> Mail
   W -- "broadcast" --> RT
-  W -- "reverse geocode (cached per cell)" --> Maps
-  UI --> Maps
+  W -- "reverse geocode (cached per cell)" --> Tiles
   API & W & UI --> Sentry
   UI --> PH
 ```
 
 **Key ideas**
 
-- **The API is the only writer.** The mobile app never writes to Postgres directly. All tables
-  live in a schema (`app`) that is *not* exposed through Supabase's auto-generated Data API, and
-  Row Level Security is enabled with no policies as a second lock.
+- **The API is the only writer.** The web app never writes to Postgres directly. All tables live
+  in a schema (`app`) that is *not* exposed through Supabase's auto-generated Data API, and Row
+  Level Security is enabled with no policies as a second lock.
 - **Postgres is the source of truth for everything**, including the job queue (outbox + jobs
   tables). There's no Redis in the MVP.
 - **Realtime is a hint, not a source of truth.** Chat and status pushes arrive over Realtime. On
   reconnect the client refetches from the API, so a dropped socket never loses data.
 - **Same code, two processes.** `api` serves HTTP. `worker` drains the outbox and runs scheduled
   jobs. They share modules and deploy from the same image.
+- **Client-agnostic API.** The future native apps will be just another client of the same `/v1`
+  API and shared packages.
 
 ---
 
@@ -94,13 +105,14 @@ apps/api/src/
 ├── worker.ts                 # outbox dispatcher + cron entrypoint
 ├── platform/                 # cross-cutting, no business rules
 │   ├── db.ts                 # pg pool, Kysely instance, withTransaction()
-│   ├── auth.ts               # Supabase JWT verification → ctx.user
+│   ├── auth.ts               # Supabase JWT verification → ctx.user (+ phone-verified check)
 │   ├── errors.ts             # DomainError → HTTP mapping, stable error codes
 │   ├── idempotency.ts        # Idempotency-Key store
 │   ├── ratelimit.ts          # Postgres fixed-window counters
 │   ├── outbox.ts             # appendEvent(tx, event); dispatcher
 │   ├── storage.ts            # signed upload/download URLs
-│   ├── push.ts               # Expo push client (batched)
+│   ├── push.ts               # Web Push (VAPID) sender; later also native push
+│   ├── email.ts              # transactional email sender
 │   ├── realtime.ts           # broadcast to private channels
 │   └── logger.ts             # pino, request ids
 └── modules/
@@ -141,22 +153,22 @@ apps/api/src/
 ```mermaid
 sequenceDiagram
   autonumber
-  participant A as Asker app
+  participant A as Asker (browser)
   participant API as API (help module)
   participant DB as Postgres
   participant W as Worker
-  participant H as Helper app
+  participant H as Helper (browser / email)
 
   A->>API: POST /v1/problems/{id}/confirm-solved<br/>{creditedOfferIds:[o1]} + Idempotency-Key
   API->>DB: BEGIN; SELECT problem FOR UPDATE; SELECT offers FOR UPDATE
-  API->>API: domain.decideConfirmSolved(...)  (R-02, R-06, R-15, K-01..K-07)
+  API->>API: domain.decideConfirmSolved(...)  (R-02, R-06, R-15, K-01..K-07, K-11)
   API->>DB: UPDATE problem → solved; UPDATE offers → credited/closed
-  API->>DB: INSERT karma_entries; UPDATE profile caches
+  API->>DB: INSERT karma_entries (helpers + asker closing award); UPDATE profile caches
   API->>DB: INSERT outbox_events (ProblemSolved, HelperCredited)
   API->>DB: COMMIT
   API-->>A: 200 {problem, credits}
   W->>DB: claim outbox rows (FOR UPDATE SKIP LOCKED)
-  W->>H: push "🎉 Ravi confirmed you solved it (+10 karma)"
+  W->>H: Web Push (or email) "🎉 Anna confirmed you solved it (+10 karma)"
   W->>DB: schedule exact-location purge (L-07)
 ```
 
@@ -169,14 +181,16 @@ pnpm workspaces + Turborepo.
 ```
 helpin/
 ├── apps/
-│   ├── mobile/          # Expo app (iOS + Android)
+│   ├── web/             # React + Vite PWA (the MVP client)
 │   ├── api/             # Fastify API + worker (see §3)
-│   └── admin/           # (Phase 6) moderation console: Vite + React, same API
+│   ├── admin/           # (Phase 6) moderation console: React, same API
+│   └── mobile/          # (later) native apps, to be planned after the web launch
 ├── packages/
 │   ├── contracts/       # zod schemas for every request/response + inferred TS types
 │   ├── domain/          # pure business rules & state machines (no I/O)
 │   ├── geo/             # H3 snapping, viewport → cells, rings, resolution policy
 │   ├── config/          # categories, response rule, rate limits, karma amounts (typed)
+│   ├── api-client/      # typed fetch client + TanStack Query hooks (reused by native later)
 │   └── db/              # SQL migrations, Kysely types (generated), seed data
 ├── infra/
 │   ├── docker-compose.yml   # local Postgres for integration tests
@@ -185,15 +199,15 @@ helpin/
 └── .github/workflows/   # CI
 ```
 
-`contracts`, `domain`, `geo` and `config` are shared by both the API and the mobile app. The app
-validates forms with the same zod schemas the API enforces, and computes H3 cells with the same
-resolution policy.
+`contracts`, `domain`, `geo`, `config` and `api-client` don't depend on the DOM, so the future
+native apps can reuse them unchanged. Only the screens get rebuilt.
 
 ---
 
 ## 5. Data layer
 
-- **Postgres 16** (Supabase-hosted, region closest to launch area, e.g. Mumbai ⚑).
+- **Postgres 16**, Supabase-hosted in **EU (Frankfurt)**: close to Budapest, and keeps personal
+  data in the EU (GDPR).
 - **Migrations:** plain SQL files, applied with `dbmate` in CI/CD. The starting point is
   [`schema-draft.sql`](schema-draft.sql).
 - **Query layer:** Kysely (type-safe SQL builder). Types are generated from the live schema with
@@ -207,7 +221,7 @@ resolution policy.
 
 | Column | Example | Purpose |
 |---|---|---|
-| `area_cell`, `area_res` | `88618…ffff`, 8 | The public cell at the chosen resolution (L-01, L-02) |
+| `area_cell`, `area_res` | `881e…ffff`, 8 | The public cell at the chosen resolution (L-01, L-02) |
 | `cell_r8` | parent/self at res 8 | Map queries at street zoom |
 | `cell_r7` | parent at res 7 | Notification fan-out, feed area |
 | `cell_r6` | parent at res 6 | Zoomed-out cluster counts |
@@ -234,22 +248,22 @@ GET /v1/map?bbox=minLng,minLat,maxLng,maxLat&zoom=15
    ORDER BY max_urgency DESC, affected_count DESC LIMIT 200;
    ```
    Cluster mode: `SELECT cell_r7, count(*), max(max_urgency) … GROUP BY cell_r7`.
-4. Blocked users' incidents are filtered out. The response is cached briefly per (cells, viewer
-   block set) only if it's ever needed.
+4. Blocked users' incidents are filtered out.
 
 Indexes: partial B-tree `(cell_r8) WHERE status='open'`, same for `cell_r7` and `cell_r6`.
 
-### 5.3 Data retention
+### 5.3 Data retention (GDPR storage limitation)
 
 | Data | Retention |
 |---|---|
 | Exact problem location, location chat messages | Hard-deleted 7 days after problem is terminal (L-07) |
 | Quarantine uploads (originals with EXIF) | Deleted immediately after processing; orphaned ones after 24 h |
 | Chat messages | Kept while account exists; anonymised on deletion |
-| Karma ledger | Permanent (anonymised on account deletion) |
-| Moderation actions | Permanent (legal/audit) |
+| Karma ledger | Kept for integrity, anonymised on account deletion |
+| Moderation actions & DSA statements of reasons | Kept as required for legal/audit purposes |
 | Outbox events | 14 days after processing |
 | Idempotency keys | 48 h |
+| Server logs | 30 days, with no coordinates, message bodies or tokens |
 
 ---
 
@@ -290,16 +304,16 @@ flowchart LR
 
 ```mermaid
 sequenceDiagram
-  participant App
+  participant B as Browser
   participant API
   participant S as Storage
   participant W as Worker
-  App->>App: compress/resize (≤ 2048 px, JPEG 0.8)
-  App->>API: POST /v1/media/upload-url {purpose, contentType, bytes}
+  B->>B: pick/capture photo → resize & compress in browser (≤ 2048 px, JPEG 0.8)
+  B->>API: POST /v1/media/upload-url {purpose, contentType, bytes}
   API->>API: validate type (jpeg/png/webp/heic) & size (≤ 10 MB), rate limit
-  API-->>App: {mediaId, signedUploadUrl} (media.status = pending)
-  App->>S: PUT original → quarantine/{userId}/{mediaId}
-  App->>API: POST /v1/media/{id}/finalize
+  API-->>B: {mediaId, signedUploadUrl} (media.status = pending)
+  B->>S: PUT original → quarantine/{userId}/{mediaId}
+  B->>API: POST /v1/media/{id}/finalize
   API->>API: append MediaUploaded
   W->>S: download original
   W->>W: sharp: auto-rotate, STRIP ALL METADATA (EXIF/GPS), convert to WebP,<br/>sizes 1600 / 800 / 320, compute blurhash
@@ -313,7 +327,8 @@ sequenceDiagram
   storage layer.
 - Media is served through **short-lived signed URLs** (1 h) issued in API responses, so removed
   content stops loading quickly and nobody can hotlink.
-- The original, with its EXIF/GPS, is never readable by anyone except the uploader (L-08).
+- The original, with its EXIF/GPS, is never readable by anyone except the uploader (L-08). Browser
+  resizing usually drops EXIF too, but the server **never relies on the client** for this.
 
 ---
 
@@ -321,7 +336,20 @@ sequenceDiagram
 
 Notifications drive liquidity (Theory §4), so they get real design.
 
-### 8.1 Nearby-problem fan-out (`onProblemCreated`)
+### 8.1 Channels on the web
+
+| Channel | Used for | Notes |
+|---|---|---|
+| **Web Push** (service worker, VAPID) | Everything time-sensitive: nearby problems, offers, messages, response reminders | Works on Android Chrome, desktop browsers, and **iPhone only when HelpIn is added to the Home Screen** (iOS 16.4+) |
+| **Email** | Fallback when the user has no active push subscription, and important account events | Loop events are sent immediately ("A helper is waiting for you"); nearby problems go out as a digest at most hourly |
+| **In-app inbox** | Every notification | Always stored in `notifications` |
+
+> ⚠️ **The biggest web-first weakness:** iPhone users get push only after installing the PWA to
+> their Home Screen. Onboarding therefore includes a guided **"Add HelpIn to your Home Screen"**
+> step on iOS, with email as the safety net. Push opt-in rate per platform is a launch metric. The
+> native apps (planned next) remove this limitation.
+
+### 8.2 Nearby-problem fan-out (`onProblemCreated`)
 
 ```
 candidates = users where
@@ -338,25 +366,26 @@ candidates = users where
   first, then random. Send to the top N, and send to more after 20 minutes if there's still no
   offer. This avoids blasting a whole area and spreads load across helpers.
 - Users' location for alerts is a **res-7 cell**, never a point (L-05).
+- Channel per user: Web Push if subscribed, otherwise the hourly email digest.
 
-### 8.2 Transactional notifications
+### 8.3 Transactional notifications
 
 | Trigger | Recipient | Example |
 |---|---|---|
-| HelpOffered | Asker | "Ankit can help with *Need a ladder*" |
-| OfferAccepted | Helper | "Priya accepted your help. Say hi 👋" |
+| HelpOffered | Asker | "Bence can help with *Need a ladder*" |
+| OfferAccepted | Helper | "Anna accepted your help. Say hi 👋" |
 | MessageSent | Other participant (if not viewing that chat) | Message preview |
-| SolveClaimed + reminders | Asker | "Did Ankit solve it? Tap to confirm" (one-tap actions) |
-| ProblemSolved / HelperCredited | Helpers, affected users | "🎉 +10 karma" / "Water issue marked fixed" |
+| SolveClaimed + reminders | Asker | "Did Bence solve it? Tap to confirm" |
+| ProblemSolved / HelperCredited | Helpers, affected users, asker | "🎉 +10 karma" / "+2 karma for closing your problem" / "Water issue marked fixed" |
 | IncidentAffectedAdded (batched hourly) | Reporter | "5 more neighbours are affected" |
-| ResponseDue (24 h / 44 h after last response, personal problems with helpers) | Raiser | "Ankit offered to help and is waiting for you" / "4 h left before you lose 5 karma", with buttons **Still need help** · **It's solved** · **Withdraw** |
+| ResponseDue (24 h / 44 h, personal problems with helpers) | Raiser | "Bence offered to help and is waiting for you" / "4 h left before you lose 5 karma", with actions **Still need help** · **It's solved** · **Withdraw** |
 | RaiserPenalized | Raiser; helpers with offers | "You didn't respond for 2 days (−5 karma)" / "The asker hasn't responded in 2 days" |
-| ProblemUpdated (batched 30 min) | Helpers with offers, affected users | "Priya updated: Partly solved, need one more person" |
+| ProblemUpdated (batched 30 min) | Helpers with offers, affected users | "Anna updated: Partly solved, need one more person" |
 | ProblemAbandoned | Raiser; helpers with offers | "Removed: no activity for 2 days" |
+| ContentRemoved | Author | DSA statement of reasons: what was removed, why, and how to appeal |
 
-Every notification is also stored in `notifications` for the in-app inbox. Push is delivered via
-**Expo Push Service** (handles FCM/APNs), batched 100 per request, and invalid tokens are pruned
-from delivery receipts.
+Notification **action buttons** are used where the browser supports them. Every notification also
+deep-links to a normal URL (`/p/{id}`, `/chat/{id}`), and that URL shows the same one-tap actions.
 
 ---
 
@@ -369,7 +398,7 @@ from delivery receipts.
   membership (`app.conversation_participants`).
 - **Flow:** API commits the message, then the outbox dispatches to the realtime consumer, then a
   broadcast is sent. The client appends it to the TanStack Query cache.
-- **Healing:** on reconnect or app foreground, the client fetches
+- **Healing:** on reconnect or tab focus, the client fetches
   `GET /conversations/{id}/messages?after={lastId}`. The API is always the source of truth.
 - Fallback if Realtime is ever a problem: the same interface can be implemented with a WebSocket
   server inside the API process plus Postgres `LISTEN/NOTIFY`.
@@ -381,37 +410,39 @@ from delivery receipts.
 - REST + JSON, versioned under `/v1`. Request/response schemas come from `packages/contracts`
   (zod), and OpenAPI is generated from them for docs and admin tooling.
 - **Auth:** `Authorization: Bearer <Supabase access token>`, verified against Supabase JWKS. On
-  first request, an `app.users` row is created from the token's `sub`.
+  first request, an `app.users` row is created from the token's `sub`. Every endpoint except
+  onboarding requires a **verified phone number** (ADR-010).
+- **CORS:** only the HelpIn web origins.
 - **Commands** (POST) require an `Idempotency-Key` header (R-07).
 - **Errors:** `{"error": {"code": "PROBLEM_NOT_OPEN", "message": "...", "details": {...}}}`. The
-  codes are stable and the app switches on `code`, never on `message`.
+  codes are stable and the client switches on `code`, never on `message`.
 - **Pagination:** opaque cursors (`?cursor=`), max 50 per page.
 
 ### Endpoint catalogue (MVP)
 
 | Area | Endpoints |
 |---|---|
-| Me | `GET /me` · `PATCH /me/profile` · `PUT /me/home-area` · `PUT /me/alert-prefs` · `POST /me/devices` · `DELETE /me` (account deletion) |
-| Users | `GET /users/{id}` · `GET /users/{id}/solver-history` · `GET /users/{id}/posts` · `GET /users/{id}/problem-photos` |
+| Me | `GET /me` · `PATCH /me/profile` · `PUT /me/home-area` · `PUT /me/alert-prefs` · `POST/DELETE /me/push-subscriptions` · `GET /me/export` (GDPR data export) · `DELETE /me` (account deletion) |
+| Users | `GET /users/{id}` · `GET /users/{id}/solver-history` · `GET /users/{id}/posts` · `GET /users/{id}/problem-photos` (anonymous problems excluded, A-04) |
 | Map & incidents | `GET /map?bbox&zoom` · `GET /incidents/similar?cell&category` · `GET /incidents/{id}` |
-| Problems | `POST /problems` · `POST /problems/{id}/withdraw` · `POST /problems/{id}/confirm-solved` · `POST /problems/{id}/credit` (after quorum, R-22) · `GET /me/problems` |
+| Problems | `POST /problems` (with `anonymous` flag) · `POST /problems/{id}/withdraw` · `POST /problems/{id}/confirm-solved` · `POST /problems/{id}/credit` (after quorum, R-22) · `GET /me/problems` |
 | Progress updates | `GET /problems/{id}/updates` · `POST /problems/{id}/updates` (raiser and helpers; affected neighbours on issues, R-40…R-46) · `POST /problems/{id}/still-need-help` (one-tap response, R-53) |
 | Same here / issues | `POST /incidents/{id}/affected` · `DELETE /incidents/{id}/affected` · `POST /incidents/{id}/fixed` |
 | Help | `POST /problems/{id}/offers` · `GET /problems/{id}/offers` (asker) · `POST /offers/{id}/accept` · `…/decline` · `…/withdraw` · `…/claim-solved` · `GET /me/offers` |
-| Chat | `GET /conversations` · `GET /conversations/{id}/messages?before|after` · `POST /conversations/{id}/messages` · `POST /conversations/{id}/read` · `POST /conversations/{id}/share-location` |
+| Chat | `GET /conversations` · `GET /conversations/{id}/messages?before|after` · `POST /conversations/{id}/messages` · `POST /conversations/{id}/read` · `POST /conversations/{id}/share-location` · `POST /conversations/{id}/reveal-identity` (anonymous askers, A-03) |
 | Media | `POST /media/upload-url` · `POST /media/{id}/finalize` · `GET /media/{id}` |
 | Feed | `GET /feed` · `POST /posts` · `DELETE /posts/{id}` · `GET/POST /posts/{id}/comments` · `PUT/DELETE /posts/{id}/reaction` |
-| Safety | `POST /reports` · `POST /blocks` · `DELETE /blocks/{userId}` · `GET /me/blocks` |
+| Safety | `POST /reports` · `POST /blocks` · `DELETE /blocks/{userId}` · `GET /me/blocks` · `POST /appeals` (DSA) |
 | Notifications | `GET /me/notifications` · `POST /me/notifications/read` |
-| Meta | `GET /meta/config` (categories, urgency labels, limits, launch areas; versioned and cached on the device) |
-| Admin (role-gated) | `GET /admin/reports` · `POST /admin/reports/{id}/resolve` · `POST /admin/users/{id}/restrict` · `POST /admin/karma/{entryId}/reverse` · `POST /admin/content/{type}/{id}/remove|restore` |
+| Meta | `GET /meta/config` (categories, urgency labels, limits, launch areas; versioned and cached) |
+| Admin (role-gated) | `GET /admin/reports` · `POST /admin/reports/{id}/resolve` · `POST /admin/users/{id}/restrict` · `POST /admin/karma/{entryId}/reverse` · `POST /admin/content/{type}/{id}/remove|restore` · `GET /admin/appeals` |
 
 ---
 
 ## 11. Configuration as data
 
 These live in `packages/config` and are served by `GET /meta/config`, so changing them doesn't
-need an app release:
+need a deploy of the client:
 
 - **Categories:** `{ id, group, label_key, icon, default_kind, default_urgency, allowed_urgencies }`.
   Groups: People · Environment · Roads & public spaces · Utilities · Safety · Other
@@ -420,81 +451,113 @@ need an app release:
 - **Response rule:** response window (48 h), reminder points (24 h, 44 h), which kinds it applies
   to (personal only), and max lifetimes per (kind, urgency) (R-50…R-57); penalty amounts and
   escalation (K-12, K-13).
-- **Karma:** award amount, cooldowns, caps (K-01…K-07).
+- **Karma:** award amounts (helper +10, asker closing +2), cooldowns, caps (K-01…K-07, K-11).
+- **Anonymous posting:** eligibility (A-05).
 - **Rate limits** per trust level.
-- **Launch areas:** `{ id, name, cells_r7[], enabled, opened_at }`. A launch area is a set of
-  res-7 cells, checked with an O(1) lookup on create (L-10).
+- **Launch areas:** `{ id, name, cells_r7[], enabled, opened_at }`, e.g. a Budapest district.
+  A launch area is a set of res-7 cells, checked with an O(1) lookup on create (L-10).
 - **Feature flags:** `feed_enabled`, `issue_quorum_enabled`, … per launch area.
 
 ---
 
-## 12. Mobile app architecture
+## 12. Web app architecture
 
 | Concern | Choice |
 |---|---|
-| Framework | Expo SDK (React Native, TypeScript), **EAS Build** + **EAS Update** for OTA JS fixes |
-| Navigation | Expo Router (file-based), bottom tabs: **Problems · Feed · ⊕ Create · Chat · Profile** |
-| Server state | TanStack Query; cache persisted to MMKV for fast cold start and offline reading |
-| Local UI state | React state + a tiny Zustand store (draft problem, map viewport) |
+| Framework | **React + TypeScript + Vite**, a single-page app. Everything is behind login, so there's no need for server rendering. |
+| PWA | `vite-plugin-pwa` (Workbox): installable to the Home Screen, offline app shell, cached recent data, Web Push via the service worker |
+| Routing | TanStack Router (type-safe URLs; every screen has a shareable URL) |
+| Layout | Mobile-first. **Bottom tab bar on phones**, left sidebar on tablets/desktop: **Problems · Feed · ⊕ Create · Chat · Profile** |
+| Server state | TanStack Query (hooks from `packages/api-client`), persisted to IndexedDB for fast reloads |
+| UI | Tailwind CSS + Radix UI primitives (accessible dialogs, menus, tabs) |
 | Forms | react-hook-form + zod schemas from `packages/contracts` |
-| Map | `react-native-maps` (Google provider on Android, Apple Maps on iOS). Incidents drawn as **hexagon polygons + a card marker at the cell centre**, never a pin at a point. |
+| Map | **MapLibre GL JS** with vector tiles from an EU-friendly provider (e.g. MapTiler, or self-hosted Protomaps later). Incidents are drawn as **hexagon fill layers + a card marker at the cell centre**, never a pin at a point. |
 | Geo | `h3-js` + `packages/geo` (same resolution policy as server) |
-| Location | `expo-location` *when-in-use only*. No background location in the MVP. |
-| Media | `expo-image-picker` → `expo-image-manipulator` (resize/compress) → signed upload with retry; `expo-image` with blurhash placeholders |
-| Push | `expo-notifications`; deep links `helpin://incident/{id}`, `helpin://chat/{id}`; actionable notification buttons (Confirm solved) |
-| i18n | `i18next`. All strings are keys from day one (English first; Hindi and regional languages later ⚑) |
-| Secure storage | `expo-secure-store` for session tokens |
-| Errors | Sentry React Native |
-| Accessibility | Urgency = icon + text + colour; minimum 44 pt targets; screen-reader labels on map cards; dynamic type |
+| Location | Browser Geolocation API (when the page is open only), with a **"pick on the map" fallback** when permission is denied |
+| Media | `<input type="file" accept="image/*" capture>` → in-browser resize/compress → signed upload with retry; blurhash placeholders |
+| Push | Service worker + Web Push (VAPID), with an **iOS "Add to Home Screen" guide** in onboarding |
+| i18n | `i18next`. English at launch; every string is a key from day one, so Hungarian can be added later |
+| Session security | Supabase JS session, strict Content-Security-Policy, HTTPS + HSTS, no third-party scripts except the ones listed |
+| Errors | Sentry browser SDK |
+| Accessibility | WCAG 2.1 AA target. Urgency = icon + text + colour; keyboard navigation; screen-reader labels on map cards; respects reduced-motion and dark mode |
 
-### Screen map
+### Screen map (URLs)
 
 ```
-(auth)    welcome → phone/OTP or Google/Apple → age 18+ & guidelines → set home area → alert prefs
-(tabs)
-  problems   map (hexagons + cards) ⇄ list view toggle · filter by category/urgency
-  feed       local chronological photo feed
-  create     fork: [Report a problem] (primary) | [Share a post]
-               problem: group → category → "is it one of these?" (similar incidents) → details → area & precision
-                        → photos → urgency (serious ⇒ 112 interstitial) → review → post
-  chat       conversation list (grouped by problem) → conversation
-  profile    header (karma · neighbours helped · reliability · badges) → tabs: Posts | Problem photos | Solved history
-incident/[id]   details · photos · 📌 latest progress update + timeline · "Updated 2 h ago"
-                "I can help" / "Same here" · offers (asker) · [Post update] [Still need help] (asker)
-                "Reply within 18 h" banner (raiser, personal problems with helpers) · confirm solved
-settings        alert prefs, blocked users, privacy, delete account, guidelines, about
+/welcome           → sign up / log in with phone (SMS code) or email (email code)
+                   → verify phone number (required) → 18+ & community guidelines
+                   → set home area → alert prefs → enable notifications (iOS: Add to Home Screen)
+/problems          map (hexagons + cards) ⇄ list view · filter by category/urgency
+/feed              local chronological photo feed
+/create            fork: [Report a problem] (primary) | [Share a post]
+                     problem: group → category → "is it one of these?" (similar incidents) → details
+                              → area & precision → photos → urgency (serious ⇒ 112 interstitial)
+                              → post as me / post anonymously → review → post
+/p/:id             problem tab: details · photos · 📌 latest progress update + timeline · "Updated 2 h ago"
+                     "I can help" / "Same here" · offers (asker) · [Post update] [Still need help] (asker)
+                     "Reply within 18 h" banner (raiser, personal problems with helpers) · confirm solved
+/chat              conversation list (grouped by problem)
+/chat/:id          conversation
+/profile, /u/:id   header (karma · neighbours helped · reliability · badges)
+                     tabs: Posts | Problem photos | Solved history
+/settings          alerts & notifications, blocked users, privacy, export my data, delete account,
+                   guidelines, terms, privacy notice, imprint/contact
 ```
+
+### Path to native apps (planned later)
+
+The API, `contracts`, `domain`, `geo`, `config` and `api-client` packages are reused as they are.
+The native app (likely Expo/React Native) rebuilds only the screens, swaps MapLibre GL JS for its
+native equivalent, and adds native push alongside Web Push in `platform/push.ts`. This will be
+planned separately after the web launch.
 
 ---
 
-## 13. Security
+## 13. Security & compliance
 
 | Area | Control |
 |---|---|
-| AuthN | Supabase Auth (phone OTP; Google & Apple sign-in). Phone verification required to earn karma (K-07) and post `serious` (S-02). ⚑ Indian SMS needs DLT-registered templates via the SMS provider. |
+| AuthN | Supabase Auth. Sign up / log in with **phone (SMS code) or email (email code)**. **Phone verification is mandatory** for every account (one account per phone number), done during onboarding. |
+| OTP abuse | CAPTCHA (e.g. Cloudflare Turnstile) before sending any SMS; per-IP, per-number and per-country limits to stop SMS-pumping fraud; SMS limited to EU numbers at launch |
 | AuthZ | Enforced in services on every command (owner/participant/role checks) and backed by domain rules. The client is never trusted. |
 | DB exposure | App tables in schema `app` (not exposed via the Data API). RLS enabled with deny-by-default. Only the API's DB role has grants. |
+| Web | Strict CSP, HSTS, `X-Content-Type-Options`, `frame-ancestors 'none'`; CORS limited to HelpIn origins; dependencies scanned in CI |
 | Input | zod validation at the edge; length caps (title ≤ 80, description ≤ 1000, message ≤ 2000, caption ≤ 500); Unicode normalisation |
-| Abuse | Per-user rate limits (§ Domain 9), per-IP limits on auth endpoints, upload size/type limits |
+| Abuse | Per-user rate limits (Domain §9), per-IP limits on auth endpoints, upload size/type limits |
 | Location privacy | Structural separation (L-03); **contract test** that walks every public response schema and fails if any field could carry exact coordinates |
+| Anonymity | Anonymous problems hide the asker publicly, but the account is always known to HelpIn and moderators (accountable anonymity, Domain §12) |
 | Media | EXIF stripping (L-08); re-encoding (neutralises malformed-image exploits); signed URLs |
-| Secrets | Platform secret store; the mobile app only carries the public Supabase anon key and a platform-restricted Maps key |
+| Secrets | Platform secret store; the web app only carries the public Supabase anon key, a domain-restricted map-tiles key, and the public VAPID key |
 | Audit | `moderation_actions` append-only; admin access to private data is logged with a reason |
-| Backups | Supabase daily backups + point-in-time recovery (Pro tier); restore drill before public launch |
-| Compliance ⚑ | Privacy policy, terms, community guidelines; in-app account deletion (store requirement); UGC requirements (report, block, moderation contact); India: DPDP Act 2023 (consent, purpose limitation, deletion) and IT Rules 2021 grievance-officer contact. Get a legal review before launch. |
+| Backups | Supabase daily backups + point-in-time recovery (Pro tier), stored in the EU; restore drill before public launch |
+
+### Legal: EU / Hungary
+
+> This is a planning checklist, not legal advice. Get a review by a Hungarian/EU lawyer before
+> public launch.
+
+| Law | What it means for HelpIn |
+|---|---|
+| **GDPR** (+ Hungarian authority NAIH) | Privacy notice; lawful basis per purpose (mostly contract + legitimate interest; consent for optional analytics); records of processing; **DPIA** recommended because of location data; data processing agreements with every processor (Supabase, hosting, SMS, email, map tiles, Sentry, PostHog); EU data residency; data-subject rights in-app: **export** (`GET /me/export`), **delete**, correct; breach procedure |
+| **ePrivacy (cookies)** | Only strictly necessary storage by default, so no consent banner is needed. Optional analytics only with consent (or cookieless mode). |
+| **Digital Services Act (DSA)** | HelpIn hosts user content, so it needs: an easy **notice-and-action** reporting mechanism (we have it); a **statement of reasons** sent to users when their content is removed or restricted; an **appeal** path (`POST /appeals`); clear terms & community guidelines; a public point of contact. Small/micro enterprises are exempt from some of the heavier obligations; the lawyer should confirm which apply. |
+| **Imprint / contact** | Operator identity and contact details published on the site |
+| **Emergency** | 112 is the EU-wide emergency number, so the "Serious" interstitial says "call 112" (S-02) |
 
 ---
 
 ## 14. Observability & analytics
 
 - **Logs:** pino JSON with request id, route, user id (hashed), latency. Never log coordinates,
-  message bodies, or tokens.
-- **Errors & performance:** Sentry (API, worker, mobile) with release tags.
+  message bodies, phone numbers, emails, or tokens.
+- **Errors & performance:** Sentry (API, worker, web) with release tags; EU data region.
 - **Health:** `GET /healthz` (process), `GET /readyz` (DB reachable, outbox lag < threshold).
-- **Key alarms:** outbox lag > 2 min · dead events > 0 · push failure rate > 5% · 5xx rate > 1%.
+- **Key alarms:** outbox lag > 2 min · dead events > 0 · push failure rate > 5% · 5xx rate > 1% ·
+  SMS sends spike (pumping fraud).
 - **Product metrics:** computed **from Postgres** (SQL views like `metrics_liquidity_daily`,
-  `metrics_solve_rate_weekly`) because the DB is the truth. Client analytics (PostHog) cover funnels
-  and UX only (create-problem drop-off, time on map vs feed).
+  `metrics_solve_rate_weekly`) because the DB is the truth. Client analytics (PostHog **EU**
+  cloud, cookieless or consent-based) cover funnels and UX only: create-problem drop-off, time on
+  map vs feed, push opt-in rate per platform, PWA install rate on iOS.
 
 ---
 
@@ -502,40 +565,44 @@ settings        alert prefs, blocked users, privacy, delete account, guidelines,
 
 | Layer | Tool | What |
 |---|---|---|
-| Domain rules | Vitest | One or more tests per rule ID (`R-06`, `K-05`, …). Test names include the ID so coverage of the rulebook is traceable. |
+| Domain rules | Vitest | One or more tests per rule ID (`R-06`, `K-05`, `A-02`, …). Test names include the ID so coverage of the rulebook is traceable. |
 | Geo | Vitest + fast-check (property tests) | Snapping is deterministic; public centre ≠ exact point; res 9 only for issues; viewport cap. |
-| API integration | Vitest + real Postgres (docker compose) | Every endpoint's happy path + main errors; **concurrency tests** (10 parallel `confirm-solved` → exactly 1 success, karma written once); idempotent replay. |
-| Contracts / privacy | Vitest | Public schemas contain no exact-location fields; responses validated against schemas in tests. |
-| Mobile | React Native Testing Library | Key components: urgency badge, create flow validation, offer list. |
-| End-to-end | Maestro | The 14-step Definition of Done (Roadmap §4) as a scripted two-user flow against staging. |
+| API integration | Vitest + real Postgres (docker compose) | Every endpoint's happy path + main errors; **concurrency tests** (10 parallel `confirm-solved` → exactly 1 success, karma written once); idempotent replay; time-travel tests for the response rule. |
+| Contracts / privacy | Vitest | Public schemas contain no exact-location fields and no anonymous-asker identity; responses validated against schemas in tests. |
+| Web components | Vitest + React Testing Library | Urgency badge, create flow validation, offer list, anonymous display. |
+| End-to-end | **Playwright** | The Definition of Done (Roadmap §4) as scripted flows with **two browser contexts** (asker + helper) against staging, on mobile viewports (iPhone + Android emulation) and desktop. |
+| Accessibility | axe-core (in Playwright) | No serious WCAG violations on core pages. |
 
 CI (GitHub Actions) on every PR: lint → typecheck → unit → integration (Postgres service
-container) → build. Merging to `main` deploys to staging; a tagged release deploys to production.
+container) → build → Playwright against a preview deployment. Merging to `main` deploys to
+staging; a tagged release deploys to production.
 
 ---
 
 ## 16. Environments & deployment
 
-| Env | Backend | DB/Auth/Storage | Mobile |
+| Env | Web app | Backend | DB/Auth/Storage |
 |---|---|---|---|
-| Local | `pnpm dev` (API + worker) | Supabase CLI local stack (Docker) | Expo Go / dev client |
-| Staging | Fly.io (or Render/Railway), 1 API + 1 worker | Supabase project `helpin-staging` | EAS internal distribution |
-| Production | Fly.io, 2 API + 1 worker, same region as DB | Supabase project `helpin-prod` (Pro) | App Store / Play Store via EAS Submit |
+| Local | `pnpm dev` (Vite) | `pnpm dev` (API + worker) | Supabase CLI local stack (Docker) |
+| Preview | Per-PR preview URL (static hosting) | Staging API | Staging Supabase |
+| Staging | `staging.helpin…` | Fly.io (Frankfurt/Amsterdam region), 1 API + 1 worker | Supabase project `helpin-staging` (EU) |
+| Production | Static hosting + CDN (e.g. Cloudflare Pages) | Fly.io EU, 2 API + 1 worker | Supabase project `helpin-prod` (EU, Pro) |
 
 Migrations run as a release step before new code starts. They must be backward-compatible
-(expand → migrate → contract) so a rollback never meets an incompatible schema.
+(expand → migrate → contract) so a rollback never meets an incompatible schema. The web app is
+static files, so rollbacks are instant.
 
 Approximate MVP running cost (verify current pricing): Supabase Pro ~$25/mo · API/worker hosting
-~$10–30/mo · Apple developer $99/yr · Google Play $25 once · SMS OTP per message · Sentry/PostHog
-free tiers · Google Maps mobile SDK map loads free, with Geocoding pay-per-use but cached per H3
-cell.
+~$10–30/mo · static web hosting free tier · map tiles free tier, then usage-based · SMS
+verification per message (the main variable cost, so OTP abuse controls matter) · email free tier
+· Sentry/PostHog free tiers · domain name. There are no app-store fees until the native apps.
 
 ---
 
 ## 17. Scaling path (only when metrics demand it)
 
-The MVP design comfortably handles a city of ~100k users (≈ 2k problems/day, ≈ 50k messages/day)
-on one Postgres instance. In order, when needed:
+The MVP design comfortably handles a whole city like Budapest (~100k users, ≈ 2k problems/day,
+≈ 50k messages/day) on one Postgres instance. In order, when needed:
 
 1. Add read replicas for map/feed/profile reads.
 2. Add Redis for rate-limit counters and hot map-cell caching.
@@ -550,11 +617,11 @@ on one Postgres instance. In order, when needed:
 
 | Future feature | Where it plugs in | Why it won't need a rewrite |
 |---|---|---|
+| **Native iOS / Android apps** | New client using the same `/v1` API and shared packages; native push added in `platform/push.ts` | API-first design; logic lives in packages, not screens |
+| **Hungarian language** | Add a translation file | All strings are i18n keys from day one |
 | **AI duplicate detection / incident clustering** | New `ai` module consuming `ProblemCreated`: embed title+description (pgvector), compare against open incidents in `gridDisk(cell_r8, 1)` + same category, then suggest or auto-merge via R-34 | Incidents already exist and every "same here" tap is labelled training data |
-| **AI category suggestion** | `POST /problems/suggest-category` called from the create flow | Category is already config-driven |
-| **Content moderation AI** | Implement the media/text `Scanner` interface | The pipeline already calls the interface (no-op today) |
+| **AI category suggestion / fake-problem detection** | `POST /problems/suggest-category`; text `Scanner` interface | Category is config-driven; the scanner hook already exists |
 | **Advanced reputation / badges / levels** | New consumers of the karma ledger | The ledger holds full, immutable history |
 | **Payments / paid tasks** | Separate `tasks` + `payments` modules with their own tables | Never touches `help_offers` or the karma ledger (Theory §3) |
-| **Civic authority integrations** | Consumer of `ProblemCreated` for `kind=issue` | Issue kind and category already modelled |
-| **Web app** | New client of the same `/v1` API + contracts | API-first design |
+| **Civic authority integrations** (e.g. Budapest district offices) | Consumer of `ProblemCreated` for `kind=issue` | Issue kind and category already modelled |
 | **New cities** | Add a launch area (config) | Launch areas are data |

@@ -1,6 +1,6 @@
 # 01 — Product Theory
 
-> **Why HelpIN should exist, how it should work, and why it can fail.**
+> **Why HelpIn should exist, how it should work, and why it can fail.**
 > This doc is the "why" behind every rule in [02 — Domain Model](02-domain-model.md) and every
 > component in [03 — Architecture](03-architecture.md). If a later decision contradicts a
 > principle here, change this doc first or change the decision.
@@ -9,7 +9,7 @@
 
 ## 1. Thesis
 
-**HelpIN turns "someone near me has a problem" into "someone near me solved it", and makes that visible.**
+**HelpIn turns "someone near me has a problem" into "someone near me solved it", and makes that visible.**
 
 The core loop. Everything else either feeds it or protects it:
 
@@ -21,13 +21,14 @@ The core loop. Everything else either feeds it or protects it:
 
 ### What's actually new
 
-Local problems already get posted somewhere: WhatsApp society/RWA groups, Facebook/Nextdoor-style
-groups, civic complaint portals, or word of mouth. All of those are **conversation systems**. A
+In Budapest, local problems already get posted somewhere: district Facebook groups ("XI. kerület"
+groups and the like), building (társasház) chats, WhatsApp/Messenger groups, civic reporting sites
+such as Járókelő, or word of mouth. All of those are **conversation systems**. A
 message is posted, scrolls away, and nobody knows whether it was resolved.
 
-HelpIN is a **status system**. Every problem has:
+HelpIn is a **status system**. Every problem has:
 
-| Property | Group chat | HelpIN |
+| Property | Group chat | HelpIn |
 |---|---|---|
 | Location | Implicit ("near gate 2") | Explicit approximate area, on a map |
 | Status | None | Open → Being helped → Solved / Expired |
@@ -70,13 +71,13 @@ telling someone the water is back at 6 pm, recognising a lost dog. The app's job
    Being recognised by your community is a stronger motivator than points.
 3. **Reward outcomes, not activity.** Karma is earned when the *asker confirms* it worked.
    Commenting, offering, or posting earns nothing.
-4. **Trigger reciprocity.** "Your neighbour Priya helped 12 people" signals a helping norm.
+4. **Trigger reciprocity.** "Your neighbour Anna helped 12 people" signals a helping norm.
    Showing that norm makes people more likely to follow it.
 
 ### Why no money in the MVP
 
 Paying for help **crowds out** intrinsic motivation (motivation-crowding effect). Once a favour has
-a price, people start asking "is ₹50 worth my time?" instead of "it's my neighbour". If payments
+a price, people start asking "is €5 worth my time?" instead of "it's my neighbour". If payments
 ever arrive, they should be a **separate product surface** (paid tasks) with its own rules, and
 must never be mixed into neighbourly help or its karma.
 
@@ -90,7 +91,7 @@ posted. Network effects here are *local*:
 - 100,000 users spread across a country → useless. Nobody is near anybody.
 - 2,000 users in one neighbourhood → works.
 
-### Liquidity definition (the metric that decides if HelpIN works)
+### Liquidity definition (the metric that decides if HelpIn works)
 
 > **Liquidity = % of open problems that receive ≥ 1 help offer within 2 hours** (non-emergency),
 > measured per launch area.
@@ -98,12 +99,12 @@ posted. Network effects here are *local*:
 
 ### Strategy
 
-1. **Atomic network first.** Launch in **one dense, bounded community**: a large apartment
-   complex / gated society, a university campus, or a single neighbourhood. Only expand to the
+1. **Atomic network first.** Launch in **one dense, bounded community** in Budapest, such as one
+   district or the area around a university campus (see "Budapest launch" below). Only expand to the
    next area once liquidity holds. A "launch area" is an explicit config object in the system
    (see Architecture §11), not an informal idea.
-2. **Seed supply before demand.** Recruit 20–50 "founding helpers" per area (RWA volunteers,
-   students, active residents) *before* opening to askers. Give them a visible founding badge.
+2. **Seed supply before demand.** Recruit 20–50 "founding helpers" per area (university
+   students, residents' association and civic volunteers, active members of district groups) *before* opening to askers. Give them a visible founding badge.
 3. **Push notifications are the engine; the map is the view.** People rarely open a map
    spontaneously. They respond to *"Someone ~400 m from you needs a hand moving a sofa"*. Targeted,
    rate-limited, geo-scoped push is the most important liquidity mechanism. The original plan
@@ -113,6 +114,28 @@ posted. Network effects here are *local*:
    users a reason to open the app before helper density exists.
 5. **Honest empty states.** "No open problems near you, which is good news. Invite neighbours so
    help is close when you need it." Never fake activity.
+6. **Web first, so make installing easy.** HelpIn launches as a web app (PWA). Android and desktop
+   browsers support push notifications directly, but iPhones only do once HelpIn is added to the
+   Home Screen. Onboarding guides iPhone users through that, and email covers anyone without push.
+   Native apps come after the web launch.
+
+### Budapest launch
+
+Launch market: **Budapest, Hungary**, with an **English** interface at first. That suits the
+city's large international community: university students, expats and young professionals.
+Hungarian follows as the first added language, because most residents, especially older people,
+prefer Hungarian.
+
+Candidate first launch areas (decision Q14):
+
+| Area | Why it fits |
+|---|---|
+| **District XI (Újbuda), around the BME / ELTE Lágymányos campuses and Bartók Béla út** | Dense; thousands of students, many international and English-speaking, who make natural founding helpers; strong local identity |
+| **District VIII–IX (Józsefváros / Ferencváros), around Corvinus, Semmelweis and Corvin-negyed** | Dense, mixed residents and students, many internationals |
+| **District VII (Erzsébetváros)** | Budapest's most densely populated district, many expats, but high short-term-rental and tourist churn |
+
+Recommendation: start in **District XI around the university campuses**. Students are the
+easiest founding helpers to recruit, and the English-first interface suits them.
 
 ---
 
@@ -145,7 +168,7 @@ machine (see Domain Model §4), so this costs very little to build but avoids a 
 **Any problem can be posted:** human problems, environmental problems (dirty areas, local rivers,
 ponds, lakes, parks), road problems, utilities, safety, or anything else. The full catalogue is in
 Domain Model §11. Environmental problems are often **community tasks**: a pond can't be cleaned
-by one person, but ten neighbours on a Sunday can. HelpIN should make organising that as easy as
+by one person, but ten neighbours on a Sunday can. HelpIn should make organising that as easy as
 asking for a ladder.
 
 ---
@@ -212,6 +235,10 @@ Once karma is a target, people optimise for karma instead of help:
   karma and is the more honest trust signal.
 - **Solver history**: the list of solved problems (category, area, date), not the private details.
 
+**Askers earn a little too:** +2 karma for closing the loop (confirming solved and crediting a
+helper), capped at 5 per week, so fake problems never pay. Helpers earn +10, because helping
+is the scarce thing.
+
 Karma is stored as an **append-only ledger**. The balance is derived from it. Every award can be
 reversed by a compensating entry, such as after a fraud finding (see Domain Model §6).
 
@@ -232,15 +259,15 @@ Safety principles:
 3. **No cold DMs.** Chat exists only in the context of a problem (helper ↔ asker). Nobody can
    message an arbitrary user. This removes most harassment vectors.
 4. **Friction proportional to risk.** New accounts get lower rate limits. Emergency posts show a
-   "call 112 first" interstitial ⚑ and require a verified phone.
+   "call 112 first" interstitial and require a verified phone.
 5. **Strip hidden data.** Photo EXIF metadata (including GPS) is removed server-side before any
    photo is visible. Without this, a "private" problem photo leaks the exact location.
 6. **Safety ships with the feature it protects.** Report/block must exist before any
    user-generated content reaches other users. The original plan put moderation in Phase 8,
-   which is too late. App stores also require report/block/filtering for UGC apps.
-7. **HelpIN is not an emergency service**, and the UI must say so wherever urgency is "Serious".
+   which is too late. The EU Digital Services Act also requires an easy reporting mechanism, a reason given for removals, and an appeal path.
+7. **HelpIn is not an emergency service**, and the UI must say so wherever urgency is "Serious".
 
-⚑ = region-specific; assumes an India launch (112 = national emergency number). Adjust per market.
+Launch market: **Budapest, Hungary (EU)**. 112 is the EU-wide emergency number.
 
 ---
 
@@ -252,7 +279,7 @@ low-stakes habit and builds a sense of "my neighbourhood". That makes people mor
 when a problem does show up.
 
 **Why it's dangerous:** feeds are addictive by design and can easily become the whole product.
-At that point HelpIN is just another Instagram clone that loses to Instagram.
+At that point HelpIn is just another Instagram clone that loses to Instagram.
 
 Guardrails:
 
@@ -312,6 +339,9 @@ These are hypotheses for a first launch area. Recalibrate after 4 weeks of real 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Not enough helpers nearby (cold start) | High | Fatal | Atomic launch area, founding helpers, push engine, single-player value for issues |
+| Web push weak on iPhone (needs Home Screen install) | High | High | Guided "Add to Home Screen" step, email fallback, track push opt-in per platform, native apps next |
+| English-only UI limits reach among Hungarian residents | High | Medium | Start where English works (students, internationals); all strings i18n-ready; Hungarian as the first added language |
+| Anonymous posting used for fake problems or abuse | Medium | Medium | Accountable anonymity (HelpIn knows the author), "Fake problem" reports, −20 karma and loss of anonymous posting, restriction on repeat |
 | Askers don't confirm, so the loop never closes | High | High | 2-day response rule with penalty; reminders offer one-tap "It's solved"; helper "I think it's solved" nudge |
 | Map fills with stale problems | High | High | Personal problems with no activity for 2 days after help started are removed; "Updated 2 h ago" freshness on every card |
 | Penalty feels unfair, so people stop posting | Medium | Medium | No clock until help starts; withdraw is always free; reminders at 24 h and 44 h; community problems exempt; small first penalty; moderator can void |
@@ -328,5 +358,6 @@ These are hypotheses for a first launch area. Recalibrate after 4 weeks of real 
 
 Payments · AI clustering (use a manual "Same issue" button instead, which also produces labelled
 training data for later) · algorithmic feed · stories/reels · open DMs · business/brand accounts ·
-integrations with civic authorities · web app (mobile only) · multiple languages (but i18n-ready
+integrations with civic authorities · native iOS/Android apps (web first; native planned next) ·
+multiple languages (English only, but i18n-ready
 strings from day one).

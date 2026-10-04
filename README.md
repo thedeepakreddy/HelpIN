@@ -1,16 +1,18 @@
-# HelpIN
+# HelpIn
 
 **See a nearby problem → help → solve it → earn reputation.**
 
-HelpIN is a hyperlocal, map-first app where people post real-world problems in an approximate
+HelpIn is a hyperlocal, map-first app where people post real-world problems in an approximate
 area, neighbours offer help, and the person who asked confirms when it's solved. Solved problems
 close automatically, and helpers earn karma. A separate local photo feed exists, but it stays
 secondary to the problem-solving loop.
 
+**Launching in Budapest, Hungary · web app first (installable PWA), native apps later · English.**
+
 > **Status:** planning. This repository holds the plan, theory and architecture the app will be
 > built from. No application code will be written until the plan is agreed.
 
-**Start here → [HelpIN MVP Plan v2](docs/00-helpin-plan.md)**, the complete plan in one document.
+**Start here → [HelpIn MVP Plan v2](docs/00-helpin-plan.md)**, the complete plan in one document.
 
 ## Documents
 
@@ -41,12 +43,19 @@ secondary to the problem-solving loop.
   a separate private table and is purged after closure, and photo EXIF/GPS is stripped.
 - **Karma:** outcome-based, append-only ledger, anti-farming rules, plus "neighbours helped" as
   the honest trust signal.
-- **Notifications are the engine:** geo-targeted, rate-limited push to nearby helpers.
-- **Stack:** Expo (React Native, TypeScript) · Fastify modular monolith + worker · Supabase
-  (Postgres, Auth, Storage, Realtime) · shared `contracts` / `domain` / `geo` packages ·
-  transactional outbox · Expo Push.
-- **Launch:** one dense area first, founding helpers, expand only when liquidity ≥ 60%.
+- **Anonymous posting:** allowed and accountable. Fake problems cost karma and the right to post
+  anonymously.
+- **Notifications are the engine:** geo-targeted, rate-limited Web Push (email fallback) to
+  nearby helpers.
+- **Stack:** React + Vite PWA with MapLibre · Fastify modular monolith + worker · Supabase in the
+  EU (Postgres, Auth with phone/email codes, Storage, Realtime) · shared `contracts` / `domain` /
+  `geo` / `api-client` packages · transactional outbox.
+- **EU-ready:** GDPR (EU data residency, export, deletion) and Digital Services Act (reporting,
+  statements of reasons, appeals).
+- **Launch:** one dense Budapest area first (recommended: District XI), founding helpers, expand
+  only when liquidity ≥ 60%.
 
 ## Navigation
 
-`Problems | Feed | ⊕ Create | Chat | Profile`, and the app always opens on **Problems**.
+`Problems | Feed | ⊕ Create | Chat | Profile` (bottom bar on phones, sidebar on desktop), and the
+app always opens on **Problems**.

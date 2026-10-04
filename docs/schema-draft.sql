@@ -1,5 +1,5 @@
 -- =============================================================================
--- HelpIN — schema draft (Postgres 16, no extensions required)
+-- HelpIn — schema draft (Postgres 16, no extensions required)
 --
 -- This is the starting point for migration 0001. Rule IDs (R-xx, K-xx, L-xx, ...)
 -- refer to docs/02-domain-model.md.
@@ -27,9 +27,10 @@ CREATE TABLE app.users (
                        CHECK (role IN ('user', 'moderator', 'admin')),
   status             text NOT NULL DEFAULT 'active'
                        CHECK (status IN ('active', 'restricted', 'deleted')),
-  phone_verified_at  timestamptz,
+  phone_verified_at  timestamptz,                      -- ADR-018: mandatory to use the app
   adult_confirmed_at timestamptz,                      -- S-01
   on_notice_until    timestamptz,                      -- K-13: 1 problem/day while set
+  anonymous_banned_until timestamptz,                  -- K-16 / A-05
   created_at         timestamptz NOT NULL DEFAULT now(),
   deleted_at         timestamptz                       -- S-07: row kept, PII scrubbed
 );
@@ -74,6 +75,7 @@ CREATE TABLE app.alert_prefs (
   quiet_start           time,
   quiet_end             time,
   serious_in_quiet      boolean NOT NULL DEFAULT false,
+  email_digest          boolean NOT NULL DEFAULT true,  -- nearby alerts by email when no push
   use_active_area       boolean NOT NULL DEFAULT false, -- opt-in "alerts where I am now"
   last_active_cell_r7   app.h3_cell,
   last_active_at        timestamptz
@@ -82,15 +84,18 @@ CREATE INDEX profiles_home_cell_idx ON app.profiles (home_cell_r7);
 CREATE INDEX alert_prefs_active_cell_idx ON app.alert_prefs (last_active_cell_r7)
   WHERE use_active_area AND last_active_cell_r7 IS NOT NULL;
 
-CREATE TABLE app.devices (
+CREATE TABLE app.push_subscriptions (                   -- Web Push now, native push later
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      uuid NOT NULL REFERENCES app.users(id),
-  push_token   text NOT NULL UNIQUE,
-  platform     text NOT NULL CHECK (platform IN ('ios', 'android')),
+  kind         text NOT NULL CHECK (kind IN ('webpush', 'native')),
+  endpoint     text NOT NULL UNIQUE,                    -- Web Push endpoint URL or native token
+  keys         jsonb,                                   -- Web Push p256dh/auth keys
+  user_agent   text,
   created_at   timestamptz NOT NULL DEFAULT now(),
-  last_seen_at timestamptz NOT NULL DEFAULT now()
+  last_seen_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (kind <> 'webpush' OR keys IS NOT NULL)
 );
-CREATE INDEX devices_user_idx ON app.devices (user_id);
+CREATE INDEX push_subscriptions_user_idx ON app.push_subscriptions (user_id);
 
 CREATE TABLE app.blocks (                               -- S-03
   blocker_id uuid NOT NULL REFERENCES app.users(id),
@@ -162,6 +167,7 @@ CREATE TABLE app.problems (
   owner_id        uuid NOT NULL REFERENCES app.users(id),
   category        text NOT NULL,
   kind            text NOT NULL CHECK (kind IN ('request', 'issue')),
+  is_anonymous    boolean NOT NULL DEFAULT false,         -- A-01: hidden publicly, known to HelpIn
   title           text NOT NULL CHECK (char_length(title) BETWEEN 3 AND 80),
   description     text NOT NULL DEFAULT '' CHECK (char_length(description) <= 1000),
   urgency         text NOT NULL CHECK (urgency IN ('basic', 'medium', 'serious')),
@@ -292,7 +298,9 @@ CREATE TABLE app.karma_entries (
                       'pair_cooldown',       -- K-05 (amount 0)
                       'pair_cap',            -- K-06 (amount 0)
                       'ineligible_account',  -- K-07 (amount 0)
+                      'closing_award',       -- K-11: asker closed the loop (+2)
                       'abandonment_penalty', -- K-12/K-13: ignored helpers (amount < 0, system)
+                      'fake_problem_penalty',-- K-16: moderator-upheld fake problem (−20)
                       'reversal'             -- K-08
                     )),
   problem_id        uuid REFERENCES app.problems(id),
@@ -305,8 +313,16 @@ CREATE TABLE app.karma_entries (
   CHECK (reason NOT IN ('pair_cooldown', 'pair_cap', 'ineligible_account') OR amount = 0),
   CHECK (reason <> 'abandonment_penalty'
          OR (amount < 0 AND source_user_id IS NULL AND problem_id IS NOT NULL)),
-  CHECK (reason <> 'solve_award' OR amount > 0)
+  CHECK (reason <> 'solve_award' OR amount > 0),
+  CHECK (reason <> 'closing_award'
+         OR (amount > 0 AND source_user_id IS NULL AND problem_id IS NOT NULL)),
+  CHECK (reason <> 'fake_problem_penalty'
+         OR (amount < 0 AND source_user_id IS NULL AND problem_id IS NOT NULL))
 );
+CREATE UNIQUE INDEX karma_one_closing_award_per_problem_idx
+  ON app.karma_entries (problem_id) WHERE reason = 'closing_award';
+CREATE UNIQUE INDEX karma_one_fake_penalty_per_problem_idx
+  ON app.karma_entries (problem_id) WHERE reason = 'fake_problem_penalty';
 CREATE UNIQUE INDEX karma_one_penalty_per_problem_idx
   ON app.karma_entries (problem_id) WHERE reason = 'abandonment_penalty';
 CREATE UNIQUE INDEX karma_one_award_per_offer_idx
@@ -331,6 +347,7 @@ CREATE TABLE app.conversation_participants (
   conversation_id      uuid NOT NULL REFERENCES app.conversations(id),
   user_id              uuid NOT NULL REFERENCES app.users(id),
   last_read_message_id bigint,
+  identity_revealed_at timestamptz,                     -- A-03: anonymous asker revealed profile
   muted                boolean NOT NULL DEFAULT false,
   PRIMARY KEY (conversation_id, user_id)
 );
@@ -408,7 +425,7 @@ CREATE TABLE app.reports (                                 -- S-04
                 'post', 'comment', 'user')),
   target_id   text NOT NULL,
   reason      text NOT NULL CHECK (reason IN (
-                'spam', 'harassment', 'dangerous', 'fraud', 'false_emergency',
+                'fake_problem', 'spam', 'harassment', 'dangerous', 'fraud', 'false_emergency',
                 'inappropriate', 'privacy', 'other')),
   details     text CHECK (char_length(details) <= 1000),
   status      text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'actioned', 'dismissed')),
@@ -425,13 +442,28 @@ CREATE TABLE app.moderation_actions (                       -- S-06: append-only
   moderator_id uuid NOT NULL REFERENCES app.users(id),
   action       text NOT NULL CHECK (action IN (
                  'remove', 'restore', 'hide', 'restrict_user', 'unrestrict_user',
-                 'reverse_karma', 'view_private_data', 'merge_incidents', 'dismiss_report')),
+                 'reverse_karma', 'view_private_data', 'reveal_anonymous_author',
+                 'fake_problem_penalty', 'merge_incidents', 'dismiss_report')),
   target_type  text NOT NULL,
   target_id    text NOT NULL,
   report_id    uuid REFERENCES app.reports(id),
   reason       text NOT NULL,
+  statement_of_reasons text,                             -- S-09 / DSA: sent to the affected user
+  automated    boolean NOT NULL DEFAULT false,           -- DSA: was the decision automated?
   created_at   timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE app.appeals (                               -- S-09 / DSA: one appeal per decision
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id              uuid NOT NULL REFERENCES app.users(id),
+  moderation_action_id bigint NOT NULL UNIQUE REFERENCES app.moderation_actions(id),
+  body                 text NOT NULL CHECK (char_length(body) BETWEEN 1 AND 2000),
+  status               text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'upheld', 'overturned')),
+  decided_by           uuid REFERENCES app.users(id),
+  created_at           timestamptz NOT NULL DEFAULT now(),
+  decided_at           timestamptz
+);
+CREATE INDEX appeals_open_idx ON app.appeals (created_at) WHERE status = 'open';
 
 -- -----------------------------------------------------------------------------
 -- Notifications

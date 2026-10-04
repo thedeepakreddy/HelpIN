@@ -1,6 +1,6 @@
 # 02 — Domain Model
 
-> The vocabulary, entities, state machines and **business rules** of HelpIN.
+> The vocabulary, entities, state machines and **business rules** of HelpIn.
 > Rules are numbered (`R-xx`, `K-xx`, `L-xx`) so that each one maps to at least one automated test.
 > The concrete SQL lives in [`schema-draft.sql`](schema-draft.sql).
 
@@ -27,7 +27,7 @@ Use these words in code, UI copy, and conversation. One word per concept.
 | **Same here** | A user marking themselves affected by an existing incident (mostly for issues). | Creating a duplicate problem |
 | **Karma** | Reputation points, derived from the karma ledger. | Money (never) |
 | **Post** | A normal social-feed photo post. Completely separate from problems. | Problem photo |
-| **Launch area** | A configured region where HelpIN is open. | Area (a cell) |
+| **Launch area** | A configured region where HelpIn is open. | Area (a cell) |
 
 ---
 
@@ -65,7 +65,7 @@ flowchart LR
 
 | Module | Owns | Key commands |
 |---|---|---|
-| Identity & Profiles | users, profiles, devices, blocks, notification prefs | signUp, updateProfile, setHomeArea, block |
+| Identity & Profiles | users, profiles, push_subscriptions, blocks, notification prefs | signUp (phone or email), verifyPhone, updateProfile, setHomeArea, block, exportData, deleteAccount |
 | Geo | H3 snapping, locality names, launch areas | snapToArea, localityFor, isInLaunchArea |
 | Problems & Incidents | incidents, problems, problem_updates, problem_photos, incident_affected, private locations | createProblem, markSameHere, withdraw, postUpdate, responseSweep (system) |
 | Help & Resolution | help_offers, resolution logic | offerHelp, acceptOffer, declineOffer, withdrawOffer, claimSolved, confirmSolved, confirmFixed (issues) |
@@ -83,7 +83,7 @@ flowchart LR
 ```mermaid
 erDiagram
   USER ||--|| PROFILE : has
-  USER ||--o{ DEVICE : "push tokens"
+  USER ||--o{ PUSH_SUBSCRIPTION : "web push (native later)"
   USER ||--o{ PROBLEM : asks
   INCIDENT ||--|{ PROBLEM : groups
   INCIDENT ||--o{ INCIDENT_AFFECTED : "same here"
@@ -124,7 +124,7 @@ Notes on what changed from the original entity list, and why:
 - **`problem_updates` added.** A public progress timeline on each problem (§4.6). Update photos
   are problem photos, so they appear in the asker's *Problem photos* profile tab, never the feed.
 - **`karma_transactions` → `karma_entries` (append-only ledger).**
-- **`blocks`, `incident_affected`, `devices`, `moderation_actions`, `outbox_events` added.**
+- **`blocks`, `incident_affected`, `push_subscriptions`, `moderation_actions`, `appeals`, `outbox_events` added.**
 
 ---
 
@@ -293,7 +293,7 @@ stateDiagram-v2
 | **R-51** | **No help, no clock.** Until the first help offer arrives, there's no deadline and no penalty. The problem stays open until solved, withdrawn, or its max lifetime (R-57). |
 | **R-52** | **The clock starts when the first help offer arrives:** `response_due_at = offer time + 48 h` (config: `response.window = 48h`). |
 | **R-53** | **Raiser responses** (each resets `response_due_at = now + 48 h`): accepting or declining an offer, replying in a problem chat, posting a progress update, tapping **"Still need help"**, or confirming solved. Withdrawing ends the problem with no penalty. |
-| **R-54** | **Reminders** (push + in-app, with one-tap *Still need help* · *It's solved* · *Withdraw*): at **24 h** without a response ("Ankit offered to help 1 day ago and is waiting for you") and at **44 h** ("4 hours left before you lose 5 karma"). |
+| **R-54** | **Reminders** (push + in-app, with one-tap *Still need help* · *It's solved* · *Withdraw*): at **24 h** without a response ("Bence offered to help 1 day ago and is waiting for you") and at **44 h** ("4 hours left before you lose 5 karma"). |
 | **R-55** | **Penalty:** when `response_due_at` passes with no raiser response, the raiser gets the penalty (K-12), **at most once per problem**. Helpers with offers are told "The asker hasn't responded in 2 days". If the raiser comes back later, they can still respond, confirm and credit, but the penalty stays. |
 | **R-56** | **Helpers keep the tab alive.** A personal problem stays on the map while *anyone* has been active in the last 48 h: a raiser response (R-53) or a public progress update from a helper with an offer (R-42). Helper chat messages don't count, because messaging an absent raiser shouldn't keep a ghost alive. If nobody has been active for 48 h, the problem becomes `abandoned` in one transaction: removed from the map, open offers → `closed`, helpers notified, exact-location purge scheduled (L-07), and the penalty applied if not already. |
 | **R-57** | **Max lifetime** (no penalty): request basic **30 d** · medium **14 d** · serious **72 h**; issue basic **90 d** · medium **60 d** · serious **7 d**. Reaching it → `expired`, with a "Post again if you still need help" notice. |
@@ -315,7 +315,7 @@ The most important privacy decisions in the product.
 
 Random jitter (moving a pin by a random 200 m) **fails under repetition**. If someone posts 5
 problems from home, averaging the jittered pins reveals their house. Snapping to a **fixed grid
-cell** always gives the same answer for the same place, so there's nothing to average. HelpIN
+cell** always gives the same answer for the same place, so there's nothing to average. HelpIn
 uses Uber's **H3** hexagonal grid:
 
 | H3 resolution | Avg cell area | Avg edge | Used for |
@@ -336,7 +336,7 @@ uses Uber's **H3** hexagonal grid:
 | **L-06** | Viewer location: the client converts its own GPS to the cells it needs and queries by cell/viewport. The API doesn't log viewer coordinates. |
 | **L-07** | Exact problem locations, and location messages in chat, are **hard-deleted 7 days after the problem becomes terminal** (data minimisation). |
 | **L-08** | All uploaded images have EXIF/XMP metadata stripped (including GPS) server-side **before** they're readable by anyone but the uploader. |
-| **L-09** | Locality label ("Near Indiranagar 2nd Stage") is reverse-geocoded from the **cell centre** and cached per cell. It never comes from the exact point. |
+| **L-09** | Locality label ("Near Bartók Béla út, District XI") is reverse-geocoded from the **cell centre** and cached per cell. It never comes from the exact point. |
 | **L-10** | Problems can only be created inside an enabled **launch area**. |
 
 ### 5.3 Visibility matrix
@@ -346,7 +346,8 @@ uses Uber's **H3** hexagonal grid:
 | Category, kind, title, description, urgency | ✅ | ✅ | ✅ | ✅ |
 | Area cell, locality label, cell centre | ✅ | ✅ | ✅ | ✅ |
 | Problem photos (processed) | ✅ | ✅ | ✅ | ✅ |
-| Asker display name, avatar, karma, neighbours helped | ✅ | ✅ | ✅ | ✅ |
+| Asker display name, avatar, karma, neighbours helped | ✅ (hidden if anonymous) | ✅ (hidden if anonymous, unless revealed) | ✅ | ✅ |
+| Real identity behind an anonymous problem | ❌ | only if the asker reveals it in chat (A-03) | ✅ | only when handling a report, audited (A-07) |
 | Counts: affected, offers, helping | ✅ | ✅ | ✅ | ✅ |
 | List of offers + helper profiles | ❌ | own only | ✅ | ✅ |
 | Problem chat | ❌ | ✅ (own) | ✅ | only when reported |
@@ -375,11 +376,12 @@ ledger at any time.
 | **K-08** | Entries are never updated or deleted. A moderator reversal appends an entry with `amount = −original` and `reverses_entry_id`. An entry can be reversed at most once. |
 | **K-09** | `neighbours_helped` = number of **distinct askers** who credited this helper (non-reversed entries, including zero-amount ones). |
 | **K-10** | **Velocity flags** (no automatic penalty, these create a moderation item): > 5 credits between the same pair in 30 days; > 15 credits to one helper in 24 h; > 5 solved problems in 24 h by one asker crediting the same helper. |
-| **K-11** | Askers earn no karma in MVP (anti-farming). Their incentive to close the loop is avoiding the abandonment penalty (K-12). |
-| **K-12** | **Silence penalty:** when the raiser of a **personal** problem misses the 48 h response window after help started (R-55), they get **−5 karma** (`reason = 'abandonment_penalty'`), at most once per problem. It **never applies to community problems**. This is the **only** way karma decreases apart from moderator reversals. Users can never take karma from each other, so there's no retaliation loop. |
+| **K-11** | **Asker closing award:** when the asker confirms solved **and credits at least one helper whose award was non-zero**, the asker gets **+2 karma** (`reason = 'closing_award'`), once per problem. Max 5 closing awards per 7 days, same eligibility as K-07. Self-solved problems (no credits), fixed-quorum solves, and solves where every credit was zeroed by K-05/K-06 earn nothing. The aim is to reward closing the loop without making fake problems profitable. |
+| **K-12** | **Silence penalty:** when the raiser of a **personal** problem misses the 48 h response window after help started (R-55), they get **−5 karma** (`reason = 'abandonment_penalty'`), at most once per problem. It **never applies to community problems**. Apart from this, karma only decreases through moderator actions (reversals K-08, fake-problem penalty K-16). Users can never take karma from each other, so there's no retaliation loop. |
 | **K-13** | **Escalation:** 2nd penalty within 30 days = **−10**. 3rd within 30 days = **−10** and the raiser is put **on notice**: max 1 new problem per day for 14 days. |
 | **K-14** | Karma **can go negative**, so the penalty means something even for new users. A new user starts at 0, and ignoring helpers on their first problem gives −5. |
 | **K-15** | **Reliability** (shown on the profile next to karma): % of the user's personal problems in the last 90 days that received help, where the user never missed the 48 h response window. "Responds to helpers: 92%". Helpers can use it to judge whether an asker is worth their time. Shown once the user has ≥ 3 such problems. |
+| **K-16** | **Fake-problem penalty:** when a moderator upholds a "fake problem" report (A-06), the asker gets **−20 karma** (`reason = 'fake_problem_penalty'`), once per problem, and loses anonymous posting for 90 days. A 2nd upheld fake problem within 180 days → account `restricted`. |
 
 Later (not MVP): weighting by urgency/impact, badges ("First Help", "10 Neighbours", "Water
 Warrior"), solver levels, streaks, and decay of inactive reputation.
@@ -439,12 +441,14 @@ Warrior"), solver levels, streaks, and decay of inactive reputation.
 | Rule | |
 |---|---|
 | **S-01** | Users must be 18+ (self-declared at signup in MVP). |
-| **S-02** | Selecting `serious` urgency shows a blocking interstitial: "HelpIN is not an emergency service. If anyone is in danger, call 112." ⚑ with a one-tap call button, before the problem can be posted. |
+| **S-02** | Selecting `serious` urgency shows a blocking interstitial: "HelpIn is not an emergency service. If anyone is in danger, call 112." (112 is the EU-wide emergency number), with a one-tap call button, before the problem can be posted. |
 | **S-03** | Block is symmetric in effect: neither user sees the other's problems, offers, posts, comments, or messages. |
-| **S-04** | Anything user-generated (problem, update, offer message, chat message, post, comment, profile) can be reported with a reason. |
+| **S-04** | Anything user-generated (problem, update, offer message, chat message, post, comment, profile) can be reported with a reason, including **"Fake problem"**. |
 | **S-05** | Content auto-hides once it has ≥ 3 distinct reports from `member`+ users, pending moderator review. |
 | **S-06** | Every moderator action (remove, restore, restrict, reverse karma, view private data) is written to `moderation_actions`, which is append-only. |
-| **S-07** | Account deletion is available in-app. It deletes the profile, posts, media and private locations, anonymises problems/messages ("Deleted user"), and keeps karma ledger rows anonymised for integrity. |
+| **S-07** | Account deletion is available in-app (GDPR right to erasure). It deletes the profile, posts, media and private locations, anonymises problems/messages ("Deleted user"), and keeps karma ledger rows anonymised for integrity. |
+| **S-08** | **Data export** is available in-app (GDPR right of access/portability): profile, problems, updates, offers, messages, posts, karma history, as a downloadable JSON/ZIP. |
+| **S-09** | **DSA notice & action:** when content is removed or an account is restricted, the affected user gets a **statement of reasons** (what, why, which rule, whether automated) and can **appeal** once. Appeals are reviewed by a different moderator where possible. |
 
 ---
 
@@ -469,6 +473,8 @@ Written in the same transaction as the state change, then consumed asynchronousl
 | `ProblemExpired` / `ProblemWithdrawn` | Notifications (helpers with offers), Location purge scheduler |
 | `MessageSent` | Notifications (if recipient not active in that chat) |
 | `ContentReported` | Moderation queue, auto-hide check (S-05) |
+| `ContentRemoved` / `UserRestricted` | Notifications (statement of reasons, S-09), appeal window opens |
+| `FakeProblemUpheld` | Karma (K-16), Identity (anonymous-posting ban), Notifications |
 | `MediaUploaded` | Media pipeline (strip, resize, scan) |
 
 ---
@@ -494,6 +500,25 @@ Rules:
 |---|---|
 | **CAT-01** | The catalogue is config (served by `/meta/config`), so categories can be added without an app release. |
 | **CAT-02** | **Community tasks:** environment issues are often things neighbours *can* fix together (a park or pond clean-up drive). Helpers can offer ("I'll join the clean-up on Sunday"), and the reporter credits them on solve, exactly like a request. |
-| **CAT-03** | **Personal support** shows helpline numbers ⚑ and a reminder not to share private details publicly. HelpIN connects neighbours; it doesn't replace professional, medical or emergency help. |
-| **CAT-04** | **Not allowed in any category** (community guidelines): anything illegal, selling or advertising, political campaigning, accusations naming a private person, medical diagnosis requests. These are reportable and removed by moderation. |
+| **CAT-03** | **Personal support** shows helpline numbers (e.g. the EU emotional-support line **116 123**; verify the Hungarian numbers before launch) and a reminder not to share private details publicly. HelpIn connects neighbours; it doesn't replace professional, medical or emergency help. |
+| **CAT-04** | **Not allowed in any category** (community guidelines): anything illegal, selling or advertising, political campaigning, accusations naming a private person, medical diagnosis requests, and **fake problems** (A-06). These are reportable and removed by moderation. |
 | **CAT-05** | Every "Same here" and every category correction a user makes is kept as labelled data for future AI category suggestion and duplicate detection. |
+
+---
+
+## 12. Anonymous posting (accountable anonymity)
+
+People can post a problem **anonymously**, for example a personal or sensitive problem, or a
+safety concern they don't want their name on. Anonymity is **public-facing only**: HelpIn always
+knows who posted, so every rule still applies and fake problems can be punished.
+
+| Rule | |
+|---|---|
+| **A-01** | When creating a problem, the asker can choose **"Post anonymously"**. Publicly the asker appears as **"Anonymous neighbour"**: no name, avatar, profile link, karma or neighbours-helped count. Their **reliability %** is still shown, so helpers can judge whether they respond. |
+| **A-02** | All normal rules apply to anonymous problems: phone-verified account, rate limits, the response rule and its penalty (R-50…R-60), the closing award (K-11), blocks, reports. |
+| **A-03** | In chat, the accepted helper also sees "Anonymous neighbour", unless the asker taps **"Reveal my profile"** in that conversation. Revealing is per conversation and can't be undone. |
+| **A-04** | Anonymous problems **never appear on the asker's public profile**: not in Problem photos, and not in their history as an asker. This prevents de-anonymisation. The asker sees them in their own private "My problems" list. Helpers still get normal credit and solver history for helping on them. |
+| **A-05** | Anonymous posting isn't available to users who are `on_notice` (K-13) or have lost the privilege because of a fake problem (K-16). |
+| **A-06** | **No fake problems.** Posting a problem that isn't real (made up, a prank, posted to farm karma, or to mislead neighbours) breaks the community guidelines, whether anonymous or not. Users report it with the reason **"Fake problem"**. If a moderator upholds it: the problem is removed, the asker gets a statement of reasons (S-09) and the fake-problem penalty (K-16). |
+| **A-07** | Moderators can see the real author of an anonymous problem **only while handling a report about it**. Every such lookup is recorded in `moderation_actions` with a reason (S-06). |
+| **A-08** | The location rules don't change: anonymous problems use the same hexagon area (L-01…L-10), and photos are EXIF-stripped (L-08). Location is often what identifies a person, so the "wider area" option is suggested when posting anonymously. |

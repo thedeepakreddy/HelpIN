@@ -8,7 +8,7 @@
 ## 1. Decision log
 
 ### ADR-001 · Mobile framework: Expo (React Native + TypeScript)
-- **Status:** Accepted
+- **Status:** Superseded by ADR-016 (web app first). Expo stays the likely choice for the later native apps.
 - **Options:** Expo/React Native · Flutter · native Kotlin + Swift
 - **Decision:** Expo.
 - **Why:** one language (TypeScript) across app, API and shared packages (`contracts`, `domain`,
@@ -82,7 +82,7 @@
   → accept → credit). Splitting it into two tables invites contradictory states.
 
 ### ADR-009 · Maps: `react-native-maps` with Google (Android) / Apple (iOS)
-- **Status:** Accepted (revisit if map styling or cost becomes an issue)
+- **Status:** Superseded by ADR-017 (MapLibre on the web)
 - **Options:** react-native-maps · Mapbox · MapLibre + OSM tiles
 - **Why:** zero-config in Expo, native map SDK loads are free, and familiar maps for users.
   Hexagons are plain polygons and work on any provider. Reverse geocoding is cached per H3 cell
@@ -91,7 +91,7 @@
   dependency. The map component is isolated behind `MapView` in the app.
 
 ### ADR-010 · Auth: phone OTP + Google/Apple sign-in
-- **Status:** Proposed (see open question Q4)
+- **Status:** Superseded by ADR-018 (the India-specific notes below no longer apply)
 - **Why:** phone numbers are the strongest cheap anti-sockpuppet signal (one account per number)
   and the norm for local apps ⚑. Social sign-in reduces signup friction. Apple sign-in is required
   on iOS if other social logins are offered. Phone verification is mandatory to earn karma or post
@@ -100,7 +100,7 @@
   that process early, because it takes time.
 
 ### ADR-011 · Feed: local, chronological, feature-flagged, after the core loop
-- **Status:** Accepted
+- **Status:** Accepted; amended by founder decision Q6: the feed is **on** in the first beta
 - **Why:** protects the core product rule ("problems first") while still giving a daily habit.
   The flag allows launching an area without the feed if it distracts.
 
@@ -142,27 +142,96 @@
 - **Decision:** people can post any local problem. Categories are grouped (People · Environment ·
   Roads & public spaces · Utilities · Safety · Other), config-driven, and each sets a default kind
   and urgency.
-- **Why:** HelpIN covers human, environmental (dirty areas, rivers, ponds, parks) and
+- **Why:** HelpIn covers human, environmental (dirty areas, rivers, ponds, parks) and
   infrastructure problems. Grouping keeps the create flow to two taps.
+
+### ADR-016 · Web app first (React + Vite PWA); native apps later
+- **Status:** Accepted (founder decision Q2)
+- **Options:** Next.js · Expo for web (React Native Web) · **React + Vite single-page PWA**
+- **Decision:** a React + Vite PWA, installable to the Home Screen. Native apps are planned after
+  the web launch (Roadmap Phase 8).
+- **Why:** everything is behind login, so server rendering/SEO adds nothing; the API already
+  exists as its own service (Next.js would add a second server); a static site is cheap and
+  instant to roll back; React + Vite gives the best web quality, especially for the map. The
+  shared packages (`contracts`, `domain`, `geo`, `config`, `api-client`) carry over to the native
+  apps unchanged.
+- **Trade-off:** on iPhone, Web Push only works once the PWA is added to the Home Screen.
+  Mitigated by a guided install step, email fallback, and native apps next.
+
+### ADR-017 · Maps on the web: MapLibre GL JS + vector tiles
+- **Status:** Accepted
+- **Options:** Google Maps JavaScript API · Mapbox GL JS · **MapLibre GL JS** with a tile provider
+- **Why:** open source with no per-map-load licence fee or lock-in. The tile provider (e.g.
+  MapTiler, later self-hosted Protomaps) can be swapped without code changes. Hexagons are native
+  fill layers. Reverse geocoding is cached per H3 cell, so its cost stays negligible.
+
+### ADR-018 · Auth: sign up with phone or email; phone verification mandatory
+- **Status:** Accepted (founder decision Q4). Supersedes ADR-010.
+- **Decision:** users sign up and log in with **phone (SMS code) or email (email code)**. Every
+  account **must verify a phone number** during onboarding, and a phone number can only belong
+  to one account.
+- **Why:** email signup lowers friction. Mandatory phone verification is the strongest cheap
+  protection against fake accounts and karma farming, which matters even more now that anonymous
+  posting is allowed.
+- **Risks:** SMS cost and SMS-pumping fraud. Mitigated by a CAPTCHA before any SMS is sent,
+  per-IP/number/country limits, EU numbers only at launch, and alerts on send spikes.
+
+### ADR-019 · EU hosting and compliance built in (Budapest launch)
+- **Status:** Accepted (founder decision Q1)
+- **Decision:** all personal data is stored and processed in the EU (Supabase Frankfurt, EU
+  hosting region, EU-region analytics/error tracking, DPAs with every processor). GDPR rights
+  (export, delete) and DSA mechanisms (reporting, statement of reasons, appeals) are product
+  features, not afterthoughts.
+- **Why:** required by law for an EU launch, and cheaper to build in from day one than to
+  retrofit.
+
+### ADR-020 · Accountable anonymous posting
+- **Status:** Accepted (founder decision Q3)
+- **Decision:** problems can be posted anonymously. The asker is hidden from the public (and
+  from helpers unless they choose to reveal themselves), but always known to HelpIn. Every rule
+  still applies, and fake problems cost −20 karma and the anonymous-posting privilege
+  (Domain §12).
+- **Why:** lets people post sensitive or personal problems without exposing themselves, without
+  creating an unaccountable channel for fake problems or abuse.
+
+### ADR-021 · Askers earn a small closing award
+- **Status:** Accepted (founder decision Q5). Replaces the original K-11 ("askers earn nothing").
+- **Decision:** +2 karma to the asker for confirming solved with at least one credited helper
+  whose award was non-zero; max 5 per 7 days.
+- **Why:** rewards closing the loop. The conditions and cap make fake problems unprofitable,
+  because a colluding pair is already zeroed by the pair rules (K-05/K-06), which also zeroes the
+  asker's award.
+
+### ADR-022 · Brand and language
+- **Status:** Accepted (founder decisions Q7, Q8)
+- **Decision:** the brand is spelled **HelpIn**. The UI launches in **English**, with every string
+  an i18n key so Hungarian can be added next.
 
 ---
 
 ## 2. Open questions for the founder
 
-These change the plan. Everything else has a sensible default already chosen above.
+### Answered
+
+| # | Question | Decision | Where it's applied |
+|---|---|---|---|
+| Q1 | Launch market | **Budapest, Hungary** | ADR-019, Theory §4, Architecture §13 |
+| Q2 | Platforms | **Web app first**, native apps planned later | ADR-016, Roadmap Phase 8 |
+| Q3 | Anonymous posting | **Yes**, following the community guidelines (no fake problems) | ADR-020, Domain §12 |
+| Q4 | Signup & phone | Sign up with **phone or email**; **phone verification mandatory** | ADR-018 |
+| Q5 | Asker karma | **Yes**, a little karma for closing a solved problem (+2) | ADR-021, K-11 |
+| Q6 | Feed in first beta | **Yes** | ADR-011, Roadmap Phase 5 |
+| Q7 | Launch language | **English** (Hungarian next) | ADR-022 |
+| Q8 | Brand spelling | **HelpIn** | ADR-022 |
+| Q9 | Team & budget | **Decide later** | — |
+| Q11 | Response timer | Starts when people start helping; 2 days of raiser silence → penalty | R-51…R-55 |
+| Q12 | Which problems get penalties | Only personal problems; community problems never | R-50, R-58, K-12 |
+| Q13 | Helpers' updates | If helpers keep updating, the problem stays alive | R-42, R-56 |
+
+### Still open
 
 | # | Question | Default if unanswered | Why it matters |
 |---|---|---|---|
-| **Q1** | **Launch market and the first launch area?** (a specific society, campus, or neighbourhood) | India; one dense neighbourhood or large gated community | Density strategy, SMS/DLT, emergency number, legal (DPDP), language |
-| **Q2** | **Android-first beta, or both platforms from day one?** | Android-first closed beta, iOS at public launch (Expo builds both, so this is about testing effort and the Apple review timeline) | Beta speed |
-| **Q3** | **Anonymous posting for sensitive problems?** (e.g. safety concerns) | No anonymity in MVP: display name shown | Safety vs. abuse; anonymity sharply increases moderation load |
-| **Q4** | **Is phone OTP mandatory at signup**, or Google/Apple first with phone needed only to earn karma? | Google/Apple or phone to sign up; phone required to earn karma / post serious | Signup conversion vs. sockpuppet resistance |
-| **Q5** | **Should askers get a little karma for confirming?** | No (K-11), measure confirmation rate first | Confirmation rate vs. farming risk |
-| **Q6** | **Feed in the first beta, or only after the loop is proven?** | Built in Phase 5, flag **off** in the first beta, on once liquidity holds | Focus |
-| **Q7** | **Launch language(s)?** | English UI, i18n-ready; add Hindi/regional next | Reach in the launch area |
-| **Q8** | **Brand spelling:** "HelpIN", "Helpin", or "HelpIn"? | "HelpIN" in docs (repo name) | Store listing, logo, copy |
-| **Q9** | **Team & budget:** solo founder + AI assistant? Any designer? | Solo + AI; design from a simple token system | Phase sizing, design-system effort |
-| **Q10** | **Moderation staffing:** who reviews reports in the beta? | Founder, with a 24 h SLA, and 2 h for `serious` | Safety promises we can actually keep |
-| ~~Q11~~ | ✅ **Answered:** the timer starts once people start helping. If the raiser doesn't respond for 2 days, the penalty applies. | → R-51…R-55 | |
-| ~~Q12~~ | ✅ **Answered:** penalties apply only to personal problems. Community problems never get penalties. (Steward handover dropped as no longer needed.) | → R-50, R-58, K-12 | |
-| ~~Q13~~ | ✅ **Answered:** if helpers keep updating, the problem stays alive (the raiser's penalty still applies if they ignore helpers). | → R-42, R-56 | |
+| **Q10** | **Who reviews reports (moderation) during the beta?** When a user reports a problem, post, message or person (fake problem, harassment, spam…), a human has to look at it and decide: keep it, remove it, or restrict the user. Under the EU Digital Services Act, reports must be handled promptly and the affected user must get a reason and a way to appeal. Options: (a) **you**, via a simple admin page; (b) you + 1–2 trusted volunteers from the founding helpers; (c) a paid moderation service (not needed at beta scale). | (a) You, with a target of reviewing reports within 24 h, and within 2 h for Serious problems | Safety promises we can actually keep; DSA compliance |
+| **Q14** | **Which Budapest area first?** | District XI (Újbuda) around the BME / ELTE Lágymányos campuses (Theory §4) | Founding helpers, density, English-friendliness |
+| **Q15** | **Who is the legal operator** (you as an individual, or a company)? | To be decided before public launch | The privacy notice (GDPR controller), imprint, terms and DSA contact point must name the operator |
