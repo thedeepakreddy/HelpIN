@@ -94,17 +94,19 @@ posted. Network effects here are *local*:
 ### Liquidity definition (the metric that decides if HelpIn works)
 
 > **Liquidity = % of open problems that receive ≥ 1 help offer within 2 hours** (non-emergency),
-> measured per launch area.
+> measured per district.
 > Launch target: **≥ 60%**. Below ~30% askers churn and never come back.
 
 ### Strategy
 
-1. **Atomic network first.** Launch in **one dense, bounded community** in Budapest, such as one
-   district or the area around a university campus (see "Budapest launch" below). Only expand to the
-   next area once liquidity holds. A "launch area" is an explicit config object in the system
-   (see Architecture §11), not an informal idea.
-2. **Seed supply before demand.** Recruit 20–50 "founding helpers" per area (university
-   students, residents' association and civic volunteers, active members of district groups) *before* opening to askers. Give them a visible founding badge.
+1. **Many small networks, one city.** HelpIn launches across **all of Budapest** at once (founder
+   decision Q14). Because liquidity is local, Budapest is treated as many small networks, not one
+   big one: liquidity is measured **per district**, and recruitment starts in a few dense seed
+   hubs before spreading (see "Budapest launch" below). The launch area is an explicit config
+   object in the system (Architecture §11), not an informal idea.
+2. **Seed supply before demand.** Recruit "founding helpers" (20–50 per seed hub: university
+   students, residents' association and civic volunteers, active members of district Facebook
+   groups) *before* opening to askers. Give them a visible founding badge.
 3. **Push notifications are the engine; the map is the view.** People rarely open a map
    spontaneously. They respond to *"Someone ~400 m from you needs a hand moving a sofa"*. Targeted,
    rate-limited, geo-scoped push is the most important liquidity mechanism. The original plan
@@ -126,16 +128,25 @@ city's large international community: university students, expats and young prof
 Hungarian follows as the first added language, because most residents, especially older people,
 prefer Hungarian.
 
-Candidate first launch areas (decision Q14):
+**Launch area: all 23 districts of Budapest** (founder decision Q14).
 
-| Area | Why it fits |
+The risk is that helpers are spread too thin across a whole city, so many problems get no offer.
+The plan counters it with **seed hubs**: founding-helper recruitment and launch marketing
+concentrate on a few dense areas first, then spread outward.
+
+| Seed hub | Why |
 |---|---|
-| **District XI (Újbuda), around the BME / ELTE Lágymányos campuses and Bartók Béla út** | Dense; thousands of students, many international and English-speaking, who make natural founding helpers; strong local identity |
-| **District VIII–IX (Józsefváros / Ferencváros), around Corvinus, Semmelweis and Corvin-negyed** | Dense, mixed residents and students, many internationals |
-| **District VII (Erzsébetváros)** | Budapest's most densely populated district, many expats, but high short-term-rental and tourist churn |
+| **District XI (Újbuda)**, around the BME / ELTE Lágymányos campuses and Bartók Béla út | Thousands of students, many international and English-speaking; natural founding helpers |
+| **Districts VIII–IX (Józsefváros / Ferencváros)**, around Corvinus, Semmelweis and Corvin-negyed | Dense, mixed residents and students, many internationals |
+| **Districts V–VII and XIII (inner city)** | Budapest's densest residential areas, many expats and young professionals |
 
-Recommendation: start in **District XI around the university campuses**. Students are the
-easiest founding helpers to recruit, and the English-first interface suits them.
+Rules for the city-wide launch:
+- **Liquidity per district** is the main launch metric. A district counts as "healthy" at ≥ 60%.
+- **Sparse areas get wider alerts:** if few helpers are near a problem, the second notification
+  wave reaches users who allow a wider radius (~4 km).
+- **Honest empty states** per district, with a strong "invite your neighbours" prompt.
+- **Recruitment follows the data:** each week, push recruitment in the districts with the most
+  unanswered problems.
 
 ---
 
@@ -316,7 +327,7 @@ When in doubt, apply these in order:
 
 ## 10. Success metrics
 
-**North-star metric: confirmed solves per week, per active launch area.**
+**North-star metric: confirmed solves per week, per district.**
 
 | Type | Metric | Launch target |
 |---|---|---|
@@ -330,7 +341,7 @@ When in doubt, apply these in order:
 | Guardrail | Notification opt-out rate | < 10% |
 | Guardrail | Share of WAU touching Problems (vs only Feed) | ≥ 70% |
 
-These are hypotheses for a first launch area. Recalibrate after 4 weeks of real data.
+These are hypotheses for the Budapest launch, measured per district. Recalibrate after 4 weeks of real data.
 
 ---
 
@@ -338,7 +349,7 @@ These are hypotheses for a first launch area. Recalibrate after 4 weeks of real 
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Not enough helpers nearby (cold start) | High | Fatal | Atomic launch area, founding helpers, push engine, single-player value for issues |
+| Not enough helpers nearby (cold start), made worse by a city-wide launch | High | Fatal | Seed hubs, founding helpers, liquidity tracked per district, wider second-wave alerts in sparse areas, push engine, single-player value for issues |
 | Web push weak on iPhone (needs Home Screen install) | High | High | Guided "Add to Home Screen" step, email fallback, track push opt-in per platform, native apps next |
 | English-only UI limits reach among Hungarian residents | High | Medium | Start where English works (students, internationals); all strings i18n-ready; Hungarian as the first added language |
 | Anonymous posting used for fake problems or abuse | Medium | Medium | Accountable anonymity (HelpIn knows the author), "Fake problem" reports, −20 karma and loss of anonymous posting, restriction on repeat |

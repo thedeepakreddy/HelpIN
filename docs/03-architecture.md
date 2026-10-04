@@ -365,6 +365,8 @@ candidates = users where
 - If there are more than N candidates (default 150), rank by ring distance, then recent helpers
   first, then random. Send to the top N, and send to more after 20 minutes if there's still no
   offer. This avoids blasting a whole area and spreads load across helpers.
+- **Sparse areas (city-wide launch, ADR-024):** if the first wave reached fewer than 20 users,
+  the 20-minute second wave extends to ring 2 (~4 km) for users whose alert preference allows it.
 - Users' location for alerts is a **res-7 cell**, never a point (L-05).
 - Channel per user: Web Push if subscribed, otherwise the hourly email digest.
 
@@ -454,8 +456,10 @@ need a deploy of the client:
 - **Karma:** award amounts (helper +10, asker closing +2), cooldowns, caps (K-01…K-07, K-11).
 - **Anonymous posting:** eligibility (A-05).
 - **Rate limits** per trust level.
-- **Launch areas:** `{ id, name, cells_r7[], enabled, opened_at }`, e.g. a Budapest district.
-  A launch area is a set of res-7 cells, checked with an O(1) lookup on create (L-10).
+- **Launch areas:** `{ id, name, cells_r7[] (each tagged with its district), enabled, opened_at }`.
+  At launch there is one area, `budapest`, covering all 23 districts (ADR-024). It's a set of res-7
+  cells, checked with an O(1) lookup on create (L-10). The district tag drives per-district
+  liquidity metrics and empty states.
 - **Feature flags:** `feed_enabled`, `issue_quorum_enabled`, … per launch area.
 
 ---
@@ -528,6 +532,7 @@ planned separately after the web launch.
 | Anonymity | Anonymous problems hide the asker publicly, but the account is always known to HelpIn and moderators (accountable anonymity, Domain §12) |
 | Media | EXIF stripping (L-08); re-encoding (neutralises malformed-image exploits); signed URLs |
 | Secrets | Platform secret store; the web app only carries the public Supabase anon key, a domain-restricted map-tiles key, and the public VAPID key |
+| Admin accounts | The founder is the sole admin until funding (ADR-023). Admin rights come from a private `ADMIN_EMAILS` server secret, never the repository. **Two-factor authentication (TOTP) is required** for admin/moderator logins. Serious-problem reports alert the admin immediately. |
 | Audit | `moderation_actions` append-only; admin access to private data is logged with a reason |
 | Backups | Supabase daily backups + point-in-time recovery (Pro tier), stored in the EU; restore drill before public launch |
 
@@ -541,7 +546,8 @@ planned separately after the web launch.
 | **GDPR** (+ Hungarian authority NAIH) | Privacy notice; lawful basis per purpose (mostly contract + legitimate interest; consent for optional analytics); records of processing; **DPIA** recommended because of location data; data processing agreements with every processor (Supabase, hosting, SMS, email, map tiles, Sentry, PostHog); EU data residency; data-subject rights in-app: **export** (`GET /me/export`), **delete**, correct; breach procedure |
 | **ePrivacy (cookies)** | Only strictly necessary storage by default, so no consent banner is needed. Optional analytics only with consent (or cookieless mode). |
 | **Digital Services Act (DSA)** | HelpIn hosts user content, so it needs: an easy **notice-and-action** reporting mechanism (we have it); a **statement of reasons** sent to users when their content is removed or restricted; an **appeal** path (`POST /appeals`); clear terms & community guidelines; a public point of contact. Small/micro enterprises are exempt from some of the heavier obligations; the lawyer should confirm which apply. |
-| **Imprint / contact** | Operator identity and contact details published on the site |
+| **Operator** | Until full release, the founder **as an individual** is the operator, GDPR data controller and DSA contact (ADR-025). When a company is formed, it takes over and users are informed. |
+| **Imprint / contact** | Operator name and contact published on the site. Use a dedicated HelpIn contact address, not a personal inbox. |
 | **Emergency** | 112 is the EU-wide emergency number, so the "Serious" interstitial says "call 112" (S-02) |
 
 ---
@@ -553,9 +559,9 @@ planned separately after the web launch.
 - **Errors & performance:** Sentry (API, worker, web) with release tags; EU data region.
 - **Health:** `GET /healthz` (process), `GET /readyz` (DB reachable, outbox lag < threshold).
 - **Key alarms:** outbox lag > 2 min · dead events > 0 · push failure rate > 5% · 5xx rate > 1% ·
-  SMS sends spike (pumping fraud).
+  SMS sends spike (pumping fraud) · open reports older than 24 h (or 2 h for Serious).
 - **Product metrics:** computed **from Postgres** (SQL views like `metrics_liquidity_daily`,
-  `metrics_solve_rate_weekly`) because the DB is the truth. Client analytics (PostHog **EU**
+  `metrics_liquidity_by_district`, `metrics_solve_rate_weekly`) because the DB is the truth. Client analytics (PostHog **EU**
   cloud, cookieless or consent-based) cover funnels and UX only: create-problem drop-off, time on
   map vs feed, push opt-in rate per platform, PWA install rate on iOS.
 

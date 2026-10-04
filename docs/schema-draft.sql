@@ -119,8 +119,9 @@ CREATE TABLE app.launch_areas (
 );
 
 CREATE TABLE app.launch_area_cells (                    -- L-10: area = set of res-7 cells
-  launch_area_id text NOT NULL REFERENCES app.launch_areas(id),
+  launch_area_id text NOT NULL REFERENCES app.launch_areas(id),  -- e.g. 'budapest' (ADR-024)
   cell_r7        app.h3_cell NOT NULL,
+  district       text NOT NULL,                          -- e.g. 'XI'; per-district metrics
   PRIMARY KEY (cell_r7, launch_area_id)
 );
 
@@ -587,6 +588,22 @@ SELECT
   percentile_cont(0.5) WITHIN GROUP (ORDER BY fo.first_offer_at - p.created_at)
                                                      AS median_time_to_first_offer
 FROM app.problems p
+LEFT JOIN LATERAL (
+  SELECT min(o.created_at) AS first_offer_at FROM app.help_offers o WHERE o.problem_id = p.id
+) fo ON true
+WHERE p.urgency <> 'serious'
+GROUP BY 1, 2;
+
+CREATE VIEW app.metrics_liquidity_by_district AS     -- ADR-024: city-wide, measured per district
+SELECT
+  c.district,
+  date_trunc('week', p.created_at)                   AS week,
+  count(*)                                           AS problems,
+  round(100.0 * count(*) FILTER (WHERE fo.first_offer_at <= p.created_at + interval '2 hours')
+        / nullif(count(*), 0), 1)                    AS liquidity_pct
+FROM app.problems p
+JOIN app.launch_area_cells c
+  ON c.cell_r7 = p.cell_r7 AND c.launch_area_id = p.launch_area_id
 LEFT JOIN LATERAL (
   SELECT min(o.created_at) AS first_offer_at FROM app.help_offers o WHERE o.problem_id = p.id
 ) fo ON true

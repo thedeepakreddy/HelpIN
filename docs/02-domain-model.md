@@ -337,7 +337,7 @@ uses Uber's **H3** hexagonal grid:
 | **L-07** | Exact problem locations, and location messages in chat, are **hard-deleted 7 days after the problem becomes terminal** (data minimisation). |
 | **L-08** | All uploaded images have EXIF/XMP metadata stripped (including GPS) server-side **before** they're readable by anyone but the uploader. |
 | **L-09** | Locality label ("Near Bartók Béla út, District XI") is reverse-geocoded from the **cell centre** and cached per cell. It never comes from the exact point. |
-| **L-10** | Problems can only be created inside an enabled **launch area**. |
+| **L-10** | Problems can only be created inside an enabled **launch area**. At launch, that's all of **Budapest** (every res-7 cell in the city, each tagged with its district). |
 
 ### 5.3 Visibility matrix
 
@@ -448,6 +448,7 @@ Warrior"), solver levels, streaks, and decay of inactive reputation.
 | **S-06** | Every moderator action (remove, restore, restrict, reverse karma, view private data) is written to `moderation_actions`, which is append-only. |
 | **S-07** | Account deletion is available in-app (GDPR right to erasure). It deletes the profile, posts, media and private locations, anonymises problems/messages ("Deleted user"), and keeps karma ledger rows anonymised for integrity. |
 | **S-08** | **Data export** is available in-app (GDPR right of access/portability): profile, problems, updates, offers, messages, posts, karma history, as a downloadable JSON/ZIP. |
+| **S-10** | **Moderation response targets:** reports are reviewed within **24 h**, and within **2 h** for Serious problems. Serious reports alert the admin immediately. Admin and moderator accounts must use **two-factor authentication**. During the beta the founder is the sole admin (ADR-023). |
 | **S-09** | **DSA notice & action:** when content is removed or an account is restricted, the affected user gets a **statement of reasons** (what, why, which rule, whether automated) and can **appeal** once. Appeals are reviewed by a different moderator where possible. |
 
 ---

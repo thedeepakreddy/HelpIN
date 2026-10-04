@@ -9,8 +9,8 @@ secondary to the problem-solving loop.
 
 **Launching in Budapest, Hungary · web app first (installable PWA), native apps later · English.**
 
-> **Status:** planning. This repository holds the plan, theory and architecture the app will be
-> built from. No application code will be written until the plan is agreed.
+> **Status:** planning complete, all decisions made. This repository holds the plan, theory and
+> architecture the app will be built from. No application code yet.
 
 **Start here → [HelpIn MVP Plan v2](docs/00-helpin-plan.md)**, the complete plan in one document.
 
@@ -21,7 +21,7 @@ secondary to the problem-solving loop.
 | 00 | [**MVP Plan v2**](docs/00-helpin-plan.md) | The whole plan in one place: the original plan + 7 strengthenings + progress updates, the 2-day response rule and open categories |
 | 01 | [Product Theory](docs/01-product-theory.md) | Why this should exist, why people help, cold start, problem taxonomy (requests vs issues), karma & safety theory, feed guardrails, metrics, risks |
 | 02 | [Domain Model](docs/02-domain-model.md) | Vocabulary, modules, entities, state machines, and the numbered rulebook (`R-`, `K-`, `L-`, `C-`, `F-`, `S-`) |
-| 03 | [Architecture](docs/03-architecture.md) | Stack, modular monolith, data layer, outbox/worker, media pipeline, notifications, realtime, API, mobile app, security, testing, deployment, scaling, extension points |
+| 03 | [Architecture](docs/03-architecture.md) | Stack, modular monolith, data layer, outbox/worker, media pipeline, notifications, realtime, API, web app, security, testing, deployment, scaling, extension points |
 | 04 | [MVP Roadmap](docs/04-mvp-roadmap.md) | Revised build phases with exit criteria; Definition of Done mapped to tests |
 | 05 | [Decisions & Open Questions](docs/05-decisions.md) | ADRs (what we chose and why) and the questions only the founder can answer |
 | — | [schema-draft.sql](docs/schema-draft.sql) | Postgres schema, the starting point for migration 0001 (validated on Postgres 16) |
@@ -52,8 +52,9 @@ secondary to the problem-solving loop.
   `geo` / `api-client` packages · transactional outbox.
 - **EU-ready:** GDPR (EU data residency, export, deletion) and Digital Services Act (reporting,
   statements of reasons, appeals).
-- **Launch:** one dense Budapest area first (recommended: District XI), founding helpers, expand
-  only when liquidity ≥ 60%.
+- **Launch:** all of Budapest, run as many small networks: founding helpers recruited in seed
+  hubs first, liquidity (≥ 60% of problems get an offer within 2 h) tracked per district.
+- **Operated by** the founder (sole admin and legal operator) until funding and a company.
 
 ## Navigation
 

@@ -207,6 +207,44 @@
 - **Decision:** the brand is spelled **HelpIn**. The UI launches in **English**, with every string
   an i18n key so Hungarian can be added next.
 
+### ADR-023 · Moderation by the founder as sole admin (until funding)
+- **Status:** Accepted (founder decision Q10)
+- **Decision:** the founder is the only admin/moderator until HelpIn is funded and has a team and
+  a company. The admin account is bootstrapped from a private server setting
+  (`ADMIN_EMAILS` secret), **not** written in the repository.
+- **Safeguards for a one-person moderation team:**
+  - **Two-factor authentication required** on the admin account, because it can see the authors
+    of anonymous problems.
+  - Report targets: review within **24 h**, and within **2 h** for Serious problems. Serious
+    reports trigger an immediate push/email to the admin.
+  - **Auto-hide after 3 reports** (S-05) protects users when the admin is offline.
+  - Every admin action is logged (S-06), which matters when one person holds all the power.
+  - When volunteers or staff join later, they get the `moderator` role (no code changes).
+
+### ADR-024 · City-wide launch across all of Budapest
+- **Status:** Accepted (founder decision Q14). Replaces the "one district first" recommendation.
+- **Decision:** HelpIn opens in **all 23 districts of Budapest** at once. The launch area
+  `budapest` is the set of all res-7 cells covering the city, each tagged with its district.
+- **Risk (Theory §4):** helpers spread thin across a whole city means many problems get no offer,
+  which is the most common way hyperlocal apps fail.
+- **How the plan adapts, "one city, many small networks":**
+  1. **Liquidity is measured per district**, not just city-wide (`metrics_liquidity_by_district`).
+  2. **Seed hubs:** founding-helper recruitment and launch marketing concentrate on a few dense
+     hubs first (university areas in XI, VIII–IX; dense inner districts V–VII, XIII), then spread.
+  3. **Wider alerts where it's sparse:** if a problem has few eligible helpers nearby, the second
+     notification wave reaches users who allow a wider alert radius (ring 2, ~4 km).
+  4. **Honest empty states** per district, with an "invite neighbours" prompt.
+  5. **District leaderboard of solved problems** (later) to create friendly local pride.
+
+### ADR-025 · Legal operator: the founder as an individual (until full release)
+- **Status:** Accepted (founder decision Q15)
+- **Decision:** until the full release, the founder operates HelpIn as an individual and is named
+  as the data controller (GDPR), in the imprint, and as the DSA contact.
+- **Recommendations:** use a **dedicated contact address** (e.g. on HelpIn's own domain) rather
+  than a personal inbox for the public imprint and DSA contact. Get a lawyer to confirm the
+  obligations of an individual operator in Hungary. When a company is founded, it takes over as
+  controller and users are informed (privacy notice update).
+
 ---
 
 ## 2. Open questions for the founder
@@ -227,11 +265,10 @@
 | Q11 | Response timer | Starts when people start helping; 2 days of raiser silence → penalty | R-51…R-55 |
 | Q12 | Which problems get penalties | Only personal problems; community problems never | R-50, R-58, K-12 |
 | Q13 | Helpers' updates | If helpers keep updating, the problem stays alive | R-42, R-56 |
+| Q10 | Who reviews reports | **The founder, as sole admin**, until funding, a team and a company exist | ADR-023 |
+| Q14 | First launch area | **All of Budapest** | ADR-024 |
+| Q15 | Legal operator | **The founder as an individual**, until the full release | ADR-025 |
 
 ### Still open
 
-| # | Question | Default if unanswered | Why it matters |
-|---|---|---|---|
-| **Q10** | **Who reviews reports (moderation) during the beta?** When a user reports a problem, post, message or person (fake problem, harassment, spam…), a human has to look at it and decide: keep it, remove it, or restrict the user. Under the EU Digital Services Act, reports must be handled promptly and the affected user must get a reason and a way to appeal. Options: (a) **you**, via a simple admin page; (b) you + 1–2 trusted volunteers from the founding helpers; (c) a paid moderation service (not needed at beta scale). | (a) You, with a target of reviewing reports within 24 h, and within 2 h for Serious problems | Safety promises we can actually keep; DSA compliance |
-| **Q14** | **Which Budapest area first?** | District XI (Újbuda) around the BME / ELTE Lágymányos campuses (Theory §4) | Founding helpers, density, English-friendliness |
-| **Q15** | **Who is the legal operator** (you as an individual, or a company)? | To be decided before public launch | The privacy notice (GDPR controller), imprint, terms and DSA contact point must name the operator |
+**None. The plan is complete.** Team & budget (Q9) is deliberately deferred.

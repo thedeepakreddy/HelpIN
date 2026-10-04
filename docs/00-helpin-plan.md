@@ -17,7 +17,7 @@
 | # | Strengthening | What it means | Where |
 |---|---|---|---|
 | 1 | **Push notifications are the engine** | Nearby helpers get a targeted, rate-limited alert when a problem is posted ("Someone ~400 m away needs a hand"). People don't open maps spontaneously, so without this the map stays empty. | §6, [03 §8](03-architecture.md#8-notifications) |
-| 2 | **Cold-start / launch strategy** | Launch in one dense Budapest area (recommended: District XI around the university campuses); recruit 20–50 founding helpers first; expand only when ≥ 60% of problems get a help offer within 2 h. | §13, [01 §4](01-product-theory.md#4-the-hardest-problem-local-liquidity-cold-start) |
+| 2 | **Cold-start / launch strategy** | Launch across all of Budapest, run as many small networks: founding helpers recruited in seed hubs first, and success (≥ 60% of problems get a help offer within 2 h) measured per district. | §13, [01 §4](01-product-theory.md#4-the-hardest-problem-local-liquidity-cold-start) |
 | 3 | **Requests vs issues** | *Requests* (a neighbour can solve it, the asker confirms) vs *issues* (shared/civic/environmental, many affected, "Same here", solved by the reporter or when 3 affected users confirm it's fixed). | §2, [01 §5](01-product-theory.md#5-not-all-problems-are-the-same-a-taxonomy) |
 | 4 | **Incidents from day one + manual "Same here"** | Every problem belongs to an incident. Users group duplicates with "Same here" now, and AI does it later as a background job with no redesign. Every tap is training data. | §8, [02 §4.5](02-domain-model.md#45-incident) |
 | 5 | **Privacy by structure** | Public location is a fixed hexagon area (~0.7 km²), never a pin. The exact point is in a separate private table, shared only by the asker in chat, and deleted after closure. Photo GPS/EXIF data is stripped. | §11, [02 §5](02-domain-model.md#5-location-privacy-model) |
@@ -44,6 +44,9 @@
 | Feed | **In the first beta** |
 | Language | **English** (Hungarian next) |
 | Brand | **HelpIn** |
+| Launch area | **All of Budapest** (23 districts), with seed hubs for recruitment |
+| Moderation | **The founder is the sole admin** until funding, a team and a company exist (2FA required) |
+| Legal operator | **The founder as an individual** until the full release |
 | Team & budget | Decide later |
 
 ---
@@ -310,11 +313,15 @@ comments · reactions · reports · moderation_actions · appeals · notificatio
 
 ## 13. Launch strategy (strengthening #2)
 
-1. Pick **one dense Budapest area**. Recommended: **District XI (Újbuda) around the BME / ELTE
-   campuses**, where students make natural, English-speaking founding helpers.
-2. Recruit **20–50 founding helpers** before opening to everyone.
-3. Closed beta → open in that area once **≥ 60% of problems get an offer within 2 h** for 2 weeks.
-4. Only then add the next area (a config change, not a rebuild).
+1. **Open across all of Budapest** (all 23 districts), but treat the city as **many small
+   networks**: liquidity is measured **per district**.
+2. **Recruit founding helpers in seed hubs first:** District XI (BME / ELTE campuses), VIII–IX
+   (Corvinus, Semmelweis, Corvin-negyed), and the inner city (V–VII, XIII).
+3. **Sparse areas get wider alerts:** if few helpers are near a problem, the second notification
+   wave reaches people up to ~4 km away who allow it.
+4. **Recruitment follows the data:** every week, focus on the districts with the most unanswered
+   problems. A district is healthy when ≥ 60% of problems get an offer within 2 h.
+5. Next city only when Budapest holds its targets (a config change, not a rebuild).
 
 **North-star metric:** confirmed solves per week. Guardrails: abandonment rate, reports, feed
 share, notification opt-outs.
@@ -332,7 +339,7 @@ share, notification opt-outs.
 | 4 | Liquidity & accountability: nearby alerts, **2-day response rule + penalty** (personal problems), issue quorum |
 | 5 | Social feed and the separated profile tabs |
 | 6 | Safety, ops & EU readiness: admin console, fake-problem handling, DSA reasons & appeals, GDPR documents, metrics, load test, legal review |
-| 7 | Closed beta → launch in one Budapest area |
+| 7 | Closed beta (seed hubs) → open across all of Budapest |
 | 8 | Native mobile apps (to be planned) |
 
 Each phase has testable exit criteria → [04 — MVP Roadmap](04-mvp-roadmap.md)
@@ -370,11 +377,13 @@ A user can:
 
 ---
 
-## 16. Decisions still needed from the founder
+## 16. Decisions
 
-1. **Who reviews reports during the beta** (moderation)?
-2. **Which Budapest area first?** (recommended: District XI)
-3. **Who is the legal operator** (you or a company)? It's needed for the privacy notice and imprint.
+**All planning decisions are made.** Team & budget is deliberately deferred.
 
-Team & budget: decided later. Everything else is decided.
-→ [05 — Decisions §2](05-decisions.md#2-open-questions-for-the-founder)
+| Role | Who |
+|---|---|
+| Admin / moderator | The founder (sole admin until funding; 2FA required; account set via a private server setting, not stored in the repo) |
+| Legal operator, GDPR controller, DSA contact | The founder as an individual, until the full release |
+
+→ Full decision log: [05 — Decisions](05-decisions.md)

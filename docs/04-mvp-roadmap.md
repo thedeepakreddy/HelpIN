@@ -15,7 +15,7 @@
 | "Solved" = owner confirms, for everything | Adds `kind = issue` with "same here", updates, and fixed-quorum resolution | Civic issues have many affected users and are rarely solved by one neighbour. |
 | Duplicate grouping deferred to AI | `incidents` from day one + manual **"Same here"** | AI later becomes a background job, with labelled data already collected. |
 | Photos: just "upload" | One media pipeline with **EXIF/GPS stripping** | Photos otherwise leak exact locations. |
-| No launch strategy | Phase 7: one launch area, founding helpers, liquidity gate | Hyperlocal apps live or die on local density. |
+| No launch strategy | Phase 7: city-wide Budapest launch run as many small networks: seed hubs, founding helpers, liquidity per district | Hyperlocal apps live or die on local density. |
 | Problem details fixed after posting | **Progress updates** timeline on every problem tab (Phase 2) | Helpers need to know what is still needed *now*. |
 | Problems stay until closed | **Response rule** (personal problems): once help starts, the raiser must respond within 2 days or lose karma; removed if nobody is active. Community problems exempt. (Phase 4) | Keeps the map live, respects helpers' time, and fixes the "never confirmed" problem. |
 | A short category list | **Any problem:** People, Environment (garbage, rivers, ponds, parks…), Roads, Utilities, Safety, Other | Matches what people actually need to post. |
@@ -143,29 +143,34 @@ reactions; profile tabs **Posts | Problem photos | Solved history** (F-04); repo
 
 ### Phase 6 — Safety, ops & launch readiness (EU) · M
 
-**Scope:** admin console (report queue, content remove/restore, restrict user, karma reversal,
-fake-problem penalty, audit log); **DSA**: statement of reasons to users, appeals queue, public
+**Scope:** admin console for the founder as sole admin (report queue, content remove/restore,
+restrict user, karma reversal, fake-problem penalty, audit log; **2FA required**; admin bootstrapped
+from a private `ADMIN_EMAILS` secret; instant alerts for Serious reports); **DSA**: statement of reasons to users, appeals queue, public
 contact point; auto-hide at 3 reports (S-05); karma velocity flags (K-10); metrics SQL views +
 dashboard; alarms (incl. SMS-fraud spikes); load test (map + chat at 10× expected beta load);
-backup restore drill; **GDPR**: final privacy notice, records of processing, DPIA, data
+backup restore drill; **GDPR** (founder as individual controller): final privacy notice, records of processing, DPIA, data
 processing agreements with all processors, cookie check; terms, community guidelines (incl. no
 fake problems), imprint; legal review.
 
 **Exit criteria**
-- A moderator can process a report end to end in the admin console. The user receives a statement
+- The admin can only log in with 2FA, and can process a report end to end in the admin console. The user receives a statement
   of reasons and can appeal, and every action is in `moderation_actions`.
 - GDPR/DSA checklist (Architecture §13) is complete and reviewed by a lawyer.
 - Load test passes with p95 API latency < 300 ms.
 - A database restore was rehearsed successfully.
 - Accessibility check (axe) shows no serious violations on core pages.
 
-### Phase 7 — Launch in Budapest · ongoing
+### Phase 7 — Launch across Budapest · ongoing
 
-1. **Closed beta (founding helpers):** 20–50 recruited helpers in the first launch area (Q14;
-   recommended: District XI around the university campuses). Seed with real problems.
-2. **Open beta in the launch area** once liquidity ≥ 60% (Theory §10) for 2 consecutive weeks.
-3. **Next district** only when the current one holds its targets. Expansion is a config change
-   (launch area + feature flags).
+1. **Closed beta (founding helpers):** recruit founding helpers in the seed hubs (District XI,
+   VIII–IX, inner city V–VII & XIII; Theory §4), while the app covers all of Budapest. Seed with
+   real problems.
+2. **Open beta, city-wide.** Track liquidity **per district** every week; a district is healthy at
+   ≥ 60%.
+3. **Recruitment follows the data:** each week, focus recruitment and promotion on the districts
+   with the most unanswered problems.
+4. **Next city** only when Budapest holds its targets. Expansion is a config change (launch area
+   + feature flags).
 
 ### Phase 8 — Native mobile apps · to be planned
 
@@ -186,7 +191,7 @@ flowchart LR
   P4 --> P6[6 Safety, ops & EU readiness]
   P5 --> P6
   P6 --> B[Closed beta in Budapest]
-  B --> L[Open in launch area]
+  B --> L[Open across Budapest]
   L --> P8[8 Native apps — to be planned]
 ```
 
