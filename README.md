@@ -85,8 +85,10 @@ Everything is set through environment variables; [`apps/api/.env.example`](apps/
 documents each one. For production you need:
 
 - `NODE_ENV=production`, a random `JWT_SECRET` of 32+ characters, and **no** `AUTH_DEV_CODE`
-- `SMS_PROVIDER=twilio` (+ credentials) and `EMAIL_PROVIDER=smtp` (+ `SMTP_URL`)
-- `STORAGE_DRIVER=s3` with an EU bucket, or a persistent `STORAGE_DIR`
+- `SMS_PROVIDER=twilio` (+ credentials)
+- Email through **Brevo** and photos in **Cloudflare R2**: follow
+  [docs/07-email-and-storage.md](docs/07-email-and-storage.md), then run
+  `pnpm --filter @helpin/api check:providers -- --email you@example.com`
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (`npx web-push generate-vapid-keys`) for push
 - `ADMIN_EMAILS` for the founder's account, `WEB_ORIGINS`, `PUBLIC_API_URL` and `WEB_URL`
 - `VITE_API_URL` when building the web app
@@ -96,8 +98,9 @@ worker processes (jobs use leases, so extra workers are safe).
 
 ### Before a public launch
 
-- **Untested against real services:** the S3 driver, Twilio, SMTP and real Web Push delivery
-  have adapters and configuration but have only run against their development stand-ins.
+- **Untested against real services:** Brevo and R2 are tested against local stand-ins (an S3
+  emulator and a TLS SMTP server); run `check:providers` once your accounts exist. Twilio and real
+  Web Push delivery have only run against their development stand-ins.
 - **Legal pages** (`/legal/*`) are drafts with placeholders for the operator's details; a lawyer
   should review them (ADR-019, ADR-025).
 - **District tags** for the launch area are approximate (nearest district centre per H3 cell);
@@ -118,6 +121,7 @@ worker processes (jobs use leases, so extra workers are safe).
 | 04 | [MVP Roadmap](docs/04-mvp-roadmap.md) | Revised build phases with exit criteria; Definition of Done mapped to tests |
 | 05 | [Decisions & Open Questions](docs/05-decisions.md) | ADRs (what we chose and why) and the questions only the founder can answer |
 | 06 | [Pages, Components & Buttons](docs/06-ui-spec.md) | Every page and route, the shell layout, design tokens, the component library, every button (who sees it, what it does, which API), sheets, error messages, empty states |
+| 07 | [Email & photo storage](docs/07-email-and-storage.md) | Setting up Brevo and Cloudflare R2, step by step, and checking they work |
 | — | [schema-draft.sql](docs/schema-draft.sql) | Postgres schema, the starting point for migration 0001 (validated on Postgres 16) |
 
 ## The plan in one screen

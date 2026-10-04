@@ -57,9 +57,25 @@ function twilio(env: Env): SmsSender {
   };
 }
 
+/** Any SMTP relay. Brevo: SMTP_HOST=smtp-relay.brevo.com, port 587 (STARTTLS), login + SMTP key. */
+export function smtpTransport(env: Env) {
+  if (env.SMTP_URL) return nodemailer.createTransport(env.SMTP_URL);
+  if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASS) throw new Error('SMTP needs SMTP_URL, or SMTP_HOST, SMTP_USER and SMTP_PASS');
+  return nodemailer.createTransport({
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_PORT === 465,
+    requireTLS: env.SMTP_PORT !== 465,
+    auth: { user: env.SMTP_USER, pass: env.SMTP_PASS },
+    // Never let a slow relay hold a sign-in request (or the worker) for long.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+}
+
 function smtp(env: Env): EmailSender {
-  if (!env.SMTP_URL) throw new Error('SMTP needs SMTP_URL');
-  const transport = nodemailer.createTransport(env.SMTP_URL);
+  const transport = smtpTransport(env);
   return {
     kind: 'smtp',
     async send(to, subject, text) {

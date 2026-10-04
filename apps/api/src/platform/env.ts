@@ -18,10 +18,16 @@ const EnvSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM: z.string().optional(),
   EMAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
+  /** Either a full SMTP_URL, or host/port/user/pass separately (easier: no URL-encoding). */
   SMTP_URL: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
   EMAIL_FROM: z.string().default('HelpIn <hello@helpin.local>'),
   STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
   STORAGE_DIR: z.string().default('./.data/storage'),
+  /** Cloudflare R2: https://<account id>.r2.cloudflarestorage.com (EU jurisdiction: .eu.r2…). */
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('eu-central-1'),
   S3_BUCKET: z.string().optional(),

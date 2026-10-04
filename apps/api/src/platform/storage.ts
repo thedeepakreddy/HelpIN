@@ -57,7 +57,10 @@ export function localStorage(env: Env): Storage {
   };
 }
 
-/** S3-compatible storage (AWS, Supabase Storage S3 API, Cloudflare R2, MinIO). */
+/**
+ * S3-compatible storage (Cloudflare R2, AWS, MinIO). Browsers upload straight to the bucket
+ * with a presigned PUT, so the bucket needs a CORS rule for the web origin (docs/07).
+ */
 export function s3Storage(env: Env): Storage {
   if (!env.S3_BUCKET) throw new Error('S3 storage needs S3_BUCKET');
   const bucket = env.S3_BUCKET;
@@ -65,6 +68,10 @@ export function s3Storage(env: Env): Storage {
     region: env.S3_REGION,
     endpoint: env.S3_ENDPOINT,
     forcePathStyle: !!env.S3_ENDPOINT,
+    // Newer SDKs add CRC32 checksums to presigned uploads by default; a browser PUT can't match
+    // them and R2 rejects the request. Only send checksums when an operation requires one.
+    requestChecksumCalculation: 'WHEN_REQUIRED',
+    responseChecksumValidation: 'WHEN_REQUIRED',
     credentials:
       env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY ? { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY } : undefined,
   });

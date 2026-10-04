@@ -94,9 +94,15 @@ const scene = (name: string) => readFileSync(new URL(`./scenes/${name}.svg`, imp
 async function photo(user: Seeded, name: string, purpose: 'problem_photo' | 'post_photo' | 'avatar' | 'chat_image'): Promise<string> {
   const jpeg = await sharp(scene(name)).resize(1200, 1200).jpeg({ quality: 82 }).toBuffer();
   const ticket = await call(user, 'POST', '/v1/media/upload-url', { purpose, contentType: 'image/jpeg', bytes: jpeg.length });
-  const put = new URL(ticket.uploadUrl as string);
-  const res = await app.inject({ method: 'PUT', url: put.pathname + put.search, payload: jpeg, headers: { 'content-type': 'image/jpeg' } });
-  if (res.statusCode !== 200) throw new Error(`upload failed: ${res.body}`);
+  if (ctx.storage.driver === 'local') {
+    const put = new URL(ticket.uploadUrl as string);
+    const res = await app.inject({ method: 'PUT', url: put.pathname + put.search, payload: jpeg, headers: { 'content-type': 'image/jpeg' } });
+    if (res.statusCode !== 200) throw new Error(`upload failed: ${res.body}`);
+  } else {
+    // R2 / S3: upload to the presigned link exactly like a browser does.
+    const res = await fetch(ticket.uploadUrl as string, { method: 'PUT', headers: ticket.headers as Record<string, string>, body: jpeg });
+    if (!res.ok) throw new Error(`upload failed: ${res.status} ${await res.text()}`);
+  }
   await call(user, 'POST', `/v1/media/${ticket.mediaId}/finalize`);
   await drain();
   return ticket.mediaId as string;

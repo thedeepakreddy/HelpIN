@@ -32,6 +32,8 @@ export async function processMedia(ctx: Ctx, mediaId: string) {
     return;
   }
   try {
+    // Direct-to-bucket uploads bypass the API's body limit, so check the size here too.
+    if (original.length > MAX_BYTES) throw new Error(`too large (${original.length} bytes)`);
     const base = sharp(original, { failOn: 'error', limitInputPixels: 50_000_000 }).rotate();
     const meta = await base.metadata();
     let width: number | null = null;
