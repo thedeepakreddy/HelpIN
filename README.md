@@ -11,7 +11,7 @@ posts, and communities. HelpIn is **not** a gig or task marketplace: no prices, 
 **Launching in Budapest, Hungary · web app first (installable PWA), native apps later · English.**
 
 > **Status:** the MVP is built: API, worker, Postgres schema and the web app, wired together.
-> It's ready for a private beta once the production providers (SMS, email, storage, Web Push)
+> It's ready for a private beta once the production providers (SMS, email, storage, Web Push).
 > are configured and the legal drafts are reviewed. See [what's left before launch](#before-a-public-launch).
 
 ## Run HelpIn locally
